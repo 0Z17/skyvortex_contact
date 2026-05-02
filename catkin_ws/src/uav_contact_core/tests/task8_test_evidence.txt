@@ -1,0 +1,52 @@
+Task 8 Evidence: test_joint_servo_bridge.py fail -> pass proof
+
+Repository worktree:
+/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1
+
+Pre-fix fail proof (reproducible via git object):
+- Baseline commit before joint_servo_bridge introduction: 40a16be
+- Method: create temporary detached worktree at 40a16be, copy current test file into that tree, run pytest.
+
+Command:
+tmpdir=$(mktemp -d) && git -C "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1" worktree add --detach "$tmpdir" 40a16be && cp "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_joint_servo_bridge.py" "$tmpdir/catkin_ws/src/uav_contact_core/tests/test_joint_servo_bridge.py" && pytest -q "$tmpdir/catkin_ws/src/uav_contact_core/tests/test_joint_servo_bridge.py" >"$tmpdir/prefix_fail_output.txt" 2>&1; test_exit=$?; cat "$tmpdir/prefix_fail_output.txt"; echo "__EXIT_CODE__=$test_exit"; git -C "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1" worktree remove --force "$tmpdir"
+
+Output:
+Preparing worktree (detached HEAD 40a16be)
+HEAD is now at 40a16be fix: add 50hz default and safe fallback to motion controller
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________ test_map_joint_angle_to_pwm_applies_limits_and_linear_mapping _________
+
+    def test_map_joint_angle_to_pwm_applies_limits_and_linear_mapping():
+>       module = _load_joint_servo_bridge_module()
+
+/tmp/tmp.1HDB9ew0JA/catkin_ws/src/uav_contact_core/tests/test_joint_servo_bridge.py:19:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/tmp/tmp.1HDB9ew0JA/catkin_ws/src/uav_contact_core/tests/test_joint_servo_bridge.py:14: in _load_joint_servo_bridge_module
+    spec.loader.exec_module(module)
+<frozen importlib._bootstrap_external>:844: in exec_module
+    ???
+<frozen importlib._bootstrap_external>:980: in get_code
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_frozen_importlib_external.SourceFileLoader object at 0x78599585fbe0>
+path = '/tmp/tmp.1HDB9ew0JA/catkin_ws/src/uav_contact_core/scripts/actuation/joint_servo_bridge.py'
+
+>   ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/tmp.1HDB9ew0JA/catkin_ws/src/uav_contact_core/scripts/actuation/joint_servo_bridge.py'
+
+<frozen importlib._bootstrap_external>:1037: FileNotFoundError
+=========================== short test summary info ============================
+FAILED ../../../../tmp/tmp.1HDB9ew0JA/catkin_ws/src/uav_contact_core/tests/test_joint_servo_bridge.py::test_map_joint_angle_to_pwm_applies_limits_and_linear_mapping
+1 failed in 0.05s
+__EXIT_CODE__=1
+
+Post-fix pass proof (current worktree HEAD):
+Command:
+pytest -q "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_joint_servo_bridge.py"; echo "__EXIT_CODE__=$?"
+
+Output:
+.                                                                        [100%]
+1 passed in 0.06s
+__EXIT_CODE__=0
