@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>uav_contact_bringup</name>
+  <version>0.0.0</version>
+  <description>Bringup configuration for UAV contact stack.</description>
+
+  <maintainer email="dev@example.com">UAV Contact Team</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <export/>
+</package>
