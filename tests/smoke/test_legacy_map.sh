@@ -31,14 +31,25 @@ while IFS= read -r line; do
   done < <(printf '%s\n' "$src_part" | tr '+' '\n')
 
   dest_part="${line#* -> }"
-  dest="${dest_part% (planned)}"
+  dest_part_trimmed="$(printf '%s' "$dest_part" | xargs)"
 
-  if [[ "$dest" == "$package_root/"* ]] && [ -f "$dest" ]; then
+  is_planned=false
+  if [[ "$dest_part_trimmed" == *" (planned)" ]]; then
+    is_planned=true
+    dest="${dest_part_trimmed% (planned)}"
+  else
+    dest="$dest_part_trimmed"
+  fi
+
+  # Destination paths in migration_map.md are package-relative.
+  # Only enforce existence for non-planned entries.
+  if [ "$is_planned" = true ]; then
     continue
   fi
 
-  [[ "$line" == *" (planned)" ]] || {
-    echo "Destination missing and not marked (planned): $dest"
+  resolved_dest="$package_root/$dest"
+  [ -f "$resolved_dest" ] || {
+    echo "Destination missing and not marked (planned): $resolved_dest"
     exit 1
   }
 done < "$map_file"
