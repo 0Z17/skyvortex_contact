@@ -1,0 +1,39 @@
+Task 7 Test Evidence
+====================
+
+a) Pre-fix reproducible proof via git object
+-------------------------------------------
+Command:
+  git -C "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1" show b81795b:catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py
+Output:
+  Exit code 128
+  fatal: Path 'catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py' exists on disk, but not in 'b81795b'.
+
+This proves the Task 7 test file did not exist at commit b81795b (pre-Task7 implementation), so the Task 7 pytest target was not satisfiable at that point.
+
+b) Passing pytest after implementation
+--------------------------------------
+Command:
+  pytest "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py" -v
+Output:
+  ============================= test session starts ==============================
+  platform linux -- Python 3.8.10, pytest-8.3.5, pluggy-1.5.0 -- /usr/bin/python3
+  cachedir: .pytest_cache
+  rootdir: /home/wsl/proj/uam_exp
+  plugins: anyio-4.5.2
+  collecting ... collected 2 items
+
+  .worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py::test_uav_motion_controller_cpp_exists PASSED [ 50%]
+  .worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py::test_velocity_fusion_and_clamp PASSED [100%]
+
+  ============================== 2 passed in 0.06s ===============================
+
+c) Successful catkin_make for uav_contact_core
+----------------------------------------------
+Command:
+  cd "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws" && catkin_make --pkg uav_contact_core
+Output (key success lines):
+  -- Configuring done
+  -- Generating done
+  -- Build files have been written to: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/build
+  [100%] Built target uav_motion_controller_node
