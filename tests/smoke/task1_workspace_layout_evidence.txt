@@ -1,15 +1,27 @@
-Task 1 smoke evidence: fail-before/pass-after
+Task 1 smoke evidence: strengthened workspace layout checks
 
-1) Pre-implementation run (expected failure)
-Command:
+Command run:
   bash tests/smoke/test_workspace_layout.sh
-Outcome:
-  FAILED
-  Exit code: 1
 
-2) Post-implementation run (expected success)
-Command:
-  bash tests/smoke/test_workspace_layout.sh
-Outcome:
+Observed package checks:
+  uav_contact_msgs:
+    - directory exists: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_msgs
+    - package.xml exists: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_msgs/package.xml
+    - CMakeLists.txt exists: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_msgs/CMakeLists.txt
+    - package.xml name match: 3:  <name>uav_contact_msgs</name>
+
+  uav_contact_core:
+    - directory exists: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core
+    - package.xml exists: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/package.xml
+    - CMakeLists.txt exists: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/CMakeLists.txt
+    - package.xml name match: 3:  <name>uav_contact_core</name>
+
+  uav_contact_bringup:
+    - directory exists: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_bringup
+    - package.xml exists: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_bringup/package.xml
+    - CMakeLists.txt exists: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_bringup/CMakeLists.txt
+    - package.xml name match: 3:  <name>uav_contact_bringup</name>
+
+Result:
+  test_workspace_layout.sh exit code: 0
   PASSED
-  Exit code: 0
