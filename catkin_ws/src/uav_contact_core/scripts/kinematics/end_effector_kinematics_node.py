@@ -28,14 +28,23 @@ class EndEffectorKinematicsNode:
 def main():
     try:
         import rospy
+        from std_msgs.msg import String
     except ImportError as exc:
         raise RuntimeError(
-            "rospy is required to run end_effector_kinematics_node.py"
+            "rospy and std_msgs are required to run end_effector_kinematics_node.py"
         ) from exc
+
+    class _StringPublisherAdapter:
+        def __init__(self, ros_publisher):
+            self._ros_publisher = ros_publisher
+
+        def publish(self, state):
+            self._ros_publisher.publish(String(data=str(state)))
 
     rospy.init_node("end_effector_kinematics", anonymous=False)
     rospy.loginfo("End-effector kinematics baseline node started")
-    node = EndEffectorKinematicsNode()
+    state_publisher = rospy.Publisher("~state", String, queue_size=10)
+    node = EndEffectorKinematicsNode(publisher=_StringPublisherAdapter(state_publisher))
     publish_rate_hz = rospy.get_param("~publish_rate_hz", 10.0)
     rate = rospy.Rate(publish_rate_hz)
 
