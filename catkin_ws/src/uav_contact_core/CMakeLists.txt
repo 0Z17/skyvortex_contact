@@ -7,5 +7,6 @@ catkin_package()
 
 catkin_install_python(PROGRAMS
   scripts/task/task_manager_node.py
+  scripts/trajectory/trajectory_server_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
