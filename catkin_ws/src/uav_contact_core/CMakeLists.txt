@@ -1,12 +1,33 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(uav_contact_core)
 
-find_package(catkin REQUIRED)
+find_package(catkin REQUIRED COMPONENTS
+  geometry_msgs
+  mavros_msgs
+  roscpp
+  std_msgs
+)
 
-catkin_package()
+catkin_package(
+  CATKIN_DEPENDS geometry_msgs mavros_msgs roscpp std_msgs
+)
+
+include_directories(
+  include
+  ${catkin_INCLUDE_DIRS}
+)
+
+add_executable(uav_motion_controller_node
+  src/control/uav_motion_controller_node.cpp
+)
+
+target_link_libraries(uav_motion_controller_node
+  ${catkin_LIBRARIES}
+)
 
 catkin_install_python(PROGRAMS
   scripts/task/task_manager_node.py
   scripts/trajectory/trajectory_server_node.py
+  scripts/control/dist_pid_controller.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
