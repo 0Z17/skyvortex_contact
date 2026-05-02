@@ -1,0 +1,79 @@
+Task 9 test evidence
+====================
+
+Worktree: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1
+Pre-fix baseline commit: 4382ea2f20fce5bd8a77d234a00d3c558cc6eef3
+
+1) Pre-fix FAIL proof (runtime behavior checks from git object)
+--------------------------------------------------------------
+Command:
+python3 - <<'PY'
+import subprocess, sys
+repo = '/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1'
+commit = '4382ea2f20fce5bd8a77d234a00d3c558cc6eef3'
+path = 'catkin_ws/src/uav_contact_core/scripts/kinematics/end_effector_kinematics_node.py'
+src = subprocess.check_output(['git','-C',repo,'show',f'{commit}:{path}'], text=True)
+checks = {
+    'while not rospy.is_shutdown() loop': 'while not rospy.is_shutdown()' in src,
+    'configurable ~publish_rate_hz param': 'rospy.get_param("~publish_rate_hz", 10.0)' in src,
+    'rospy.Rate used for continuous publish': 'rospy.Rate(' in src,
+    'no single-shot rospy.spin()': 'rospy.spin()' not in src,
+}
+failed = [name for name, ok in checks.items() if not ok]
+print('PRE-FIX CHECKS on', commit)
+for name, ok in checks.items():
+    print(f'- {name}:', 'PASS' if ok else 'FAIL')
+if failed:
+    print('RESULT: FAIL')
+    sys.exit(1)
+print('RESULT: PASS')
+PY
+
+Output:
+PRE-FIX CHECKS on 4382ea2f20fce5bd8a77d234a00d3c558cc6eef3
+- while not rospy.is_shutdown() loop: FAIL
+- configurable ~publish_rate_hz param: FAIL
+- rospy.Rate used for continuous publish: FAIL
+- no single-shot rospy.spin(): FAIL
+RESULT: FAIL
+(exit code 1)
+
+2) Post-fix PASS proof (same checks on working tree)
+----------------------------------------------------
+Command:
+python3 - <<'PY'
+import sys
+path = '/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/scripts/kinematics/end_effector_kinematics_node.py'
+src = open(path, 'r', encoding='utf-8').read()
+checks = {
+    'while not rospy.is_shutdown() loop': 'while not rospy.is_shutdown()' in src,
+    'configurable ~publish_rate_hz param': 'rospy.get_param("~publish_rate_hz", 10.0)' in src,
+    'rospy.Rate used for continuous publish': 'rospy.Rate(' in src,
+    'no single-shot rospy.spin()': 'rospy.spin()' not in src,
+}
+failed = [name for name, ok in checks.items() if not ok]
+print('POST-FIX CHECKS on working tree')
+for name, ok in checks.items():
+    print(f'- {name}:', 'PASS' if ok else 'FAIL')
+if failed:
+    print('RESULT: FAIL')
+    sys.exit(1)
+print('RESULT: PASS')
+PY
+
+Output:
+POST-FIX CHECKS on working tree
+- while not rospy.is_shutdown() loop: PASS
+- configurable ~publish_rate_hz param: PASS
+- rospy.Rate used for continuous publish: PASS
+- no single-shot rospy.spin(): PASS
+RESULT: PASS
+
+3) Pytest PASS proof
+--------------------
+Command:
+pytest -q /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_end_effector_kinematics.py
+
+Output:
+..                                                                       [100%]
+2 passed in 0.09s

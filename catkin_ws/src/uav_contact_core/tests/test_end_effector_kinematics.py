@@ -25,3 +25,22 @@ def test_state_contains_pose_twist_and_contact_fields():
     assert "angular_velocity" in state
     assert "normal_velocity" in state
     assert "contact_error" in state
+
+
+def test_build_and_publish_emits_state_once_with_fake_publisher():
+    module = _load_end_effector_module()
+
+    class FakePublisher:
+        def __init__(self):
+            self.published = []
+
+        def publish(self, message):
+            self.published.append(message)
+
+    fake_publisher = FakePublisher()
+    node = module.EndEffectorKinematicsNode(publisher=fake_publisher)
+
+    state = node.build_and_publish()
+
+    assert len(fake_publisher.published) == 1
+    assert fake_publisher.published[0] == state

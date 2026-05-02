@@ -26,13 +26,22 @@ class EndEffectorKinematicsNode:
 
 
 def main():
-    import rospy
+    try:
+        import rospy
+    except ImportError as exc:
+        raise RuntimeError(
+            "rospy is required to run end_effector_kinematics_node.py"
+        ) from exc
 
     rospy.init_node("end_effector_kinematics", anonymous=False)
     rospy.loginfo("End-effector kinematics baseline node started")
     node = EndEffectorKinematicsNode()
-    node.build_and_publish()
-    rospy.spin()
+    publish_rate_hz = rospy.get_param("~publish_rate_hz", 10.0)
+    rate = rospy.Rate(publish_rate_hz)
+
+    while not rospy.is_shutdown():
+        node.build_and_publish()
+        rate.sleep()
 
 
 if __name__ == "__main__":
