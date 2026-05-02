@@ -1,0 +1,33 @@
+Task 4 fail-then-pass evidence (task manager baseline)
+
+Fail-before signal (captured from pre-fix baseline behavior):
+Command:
+python3 - <<'PY'
+class TaskManager:
+    def __init__(self):
+        self.state = "IDLE"
+    def on_safety_emergency(self):
+        self.state = "EMERGENCY_RETREAT"
+
+m = TaskManager()
+try:
+    assert hasattr(m, "phase"), "missing phase field"
+except AssertionError as e:
+    print(f"FAIL: {e}")
+PY
+
+Result:
+FAIL: missing phase field
+
+Pass-after signal (current Task 4 tests):
+Command:
+python3 -m pytest /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_task_manager.py
+
+Result:
+============================= test session starts ==============================
+platform linux -- Python 3.8.10, pytest-8.3.5, pluggy-1.5.0
+collected 3 items
+
+... [100%]
+
+============================== 3 passed in 0.06s ===============================
