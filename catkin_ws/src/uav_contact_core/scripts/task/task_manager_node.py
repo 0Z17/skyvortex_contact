@@ -11,6 +11,8 @@ except ImportError:  # pragma: no cover - allows tests without ROS runtime
 class TaskManager:
     """Minimal Task 4 baseline task manager with explicit phases."""
 
+    # Task 4 local state-machine phase constants for baseline behavior.
+    # Message-level enum integration is intentionally handled in later integration tasks.
     IDLE = "IDLE"
     STABILIZE = "STABILIZE"
     APPROACH = "APPROACH"

@@ -1,33 +1,54 @@
-Task 4 fail-then-pass evidence (task manager baseline)
+Task 4 Compliance Evidence (strict reproducible)
 
-Fail-before signal (captured from pre-fix baseline behavior):
+Task 4 requirement summary (exact):
+- Task manager baseline must use structured phase constants and expose a minimal ROS node scaffold.
+- Evidence must be reproducible with command-level proof from repository history.
+- Tests for Task 4 behavior must pass.
+
+Pre-fix proof using git object inspection against parent commit of 369aa28
+Parent commit:
 Command:
-python3 - <<'PY'
+git -C "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1" rev-parse 369aa28^
+Output:
+94c23503e9ae1d629fb9e25e0c8b7b64f968f221
+
+Proof command 1 (show full pre-fix file):
+Command:
+git -C "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1" show 94c23503e9ae1d629fb9e25e0c8b7b64f968f221:"catkin_ws/src/uav_contact_core/scripts/task/task_manager_node.py"
+Output:
+#!/usr/bin/env python3
+
+
 class TaskManager:
+    """Minimal baseline task manager state holder."""
+
     def __init__(self):
         self.state = "IDLE"
+
     def on_safety_emergency(self):
         self.state = "EMERGENCY_RETREAT"
 
-m = TaskManager()
-try:
-    assert hasattr(m, "phase"), "missing phase field"
-except AssertionError as e:
-    print(f"FAIL: {e}")
-PY
-
-Result:
-FAIL: missing phase field
-
-Pass-after signal (current Task 4 tests):
+Proof command 2 (grep for structured constants/node scaffold markers):
 Command:
-python3 -m pytest /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_task_manager.py
+git -C "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1" show 94c23503e9ae1d629fb9e25e0c8b7b64f968f221:"catkin_ws/src/uav_contact_core/scripts/task/task_manager_node.py" | grep -nE "STABILIZE|APPROACH|INITIAL_CONTACT|SLIDING_CONTACT|RETREAT|EMERGENCY_RETREAT|FINISHED|TaskManagerNode|rospy\.init_node" || true
+Output:
+11:        self.state = "EMERGENCY_RETREAT"
 
-Result:
+Interpretation:
+- No structured class-level phase constants (only literal state assignment present).
+- No TaskManagerNode scaffold and no rospy.init_node in pre-fix file.
+
+Post-fix proof (current branch)
+Command:
+python3 -m pytest "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_task_manager.py"
+Output snippet:
 ============================= test session starts ==============================
 platform linux -- Python 3.8.10, pytest-8.3.5, pluggy-1.5.0
+rootdir: /home/wsl/proj/uam_exp
+plugins: anyio-4.5.2
 collected 3 items
 
-... [100%]
+.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_task_manager.py . [ 33%]
+..                                                                       [100%]
 
-============================== 3 passed in 0.06s ===============================
+============================== 3 passed in 0.61s ===============================
