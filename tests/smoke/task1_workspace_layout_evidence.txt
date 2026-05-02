@@ -1,0 +1,15 @@
+Task 1 smoke evidence: fail-before/pass-after
+
+1) Pre-implementation run (expected failure)
+Command:
+  bash tests/smoke/test_workspace_layout.sh
+Outcome:
+  FAILED
+  Exit code: 1
+
+2) Post-implementation run (expected success)
+Command:
+  bash tests/smoke/test_workspace_layout.sh
+Outcome:
+  PASSED
+  Exit code: 0
