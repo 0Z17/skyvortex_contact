@@ -1,0 +1,44 @@
+Task 10 compliance evidence for test_safety_monitor.py
+
+Pre-fix failure proof (reproducible via git object/worktree)
+Command:
+git -C "/home/wsl/proj/uam_exp" worktree add --detach "/tmp/uam_task10_prefix" d636d31 && mkdir -p "/tmp/uam_task10_prefix/catkin_ws/src/uav_contact_core/tests" && git -C "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1" show HEAD:catkin_ws/src/uav_contact_core/tests/test_safety_monitor.py > "/tmp/uam_task10_prefix/catkin_ws/src/uav_contact_core/tests/test_safety_monitor.py" && python3 -m pytest -q "/tmp/uam_task10_prefix/catkin_ws/src/uav_contact_core/tests/test_safety_monitor.py"
+
+Output:
+Preparing worktree (detached HEAD d636d31)
+HEAD is now at d636d31 fix: wire baseline ROS publisher in kinematics node
+F                                                                        [100%]
+=================================== FAILURES ===================================
+________________________ test_roll_limit_triggers_state ________________________
+
+    def test_roll_limit_triggers_state():
+>       module = _load_safety_module()
+
+/tmp/uam_task10_prefix/catkin_ws/src/uav_contact_core/tests/test_safety_monitor.py:19:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/tmp/uam_task10_prefix/catkin_ws/src/uav_contact_core/tests/test_safety_monitor.py:14: in _load_safety_module
+    spec.loader.exec_module(module)
+<frozen importlib._bootstrap_external>:844: in exec_module
+    ???
+<frozen importlib._bootstrap_external>:980: in get_code
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <_frozen_importlib_external.SourceFileLoader object at 0x72a4f6500190>
+path = '/tmp/uam_task10_prefix/catkin_ws/src/uav_contact_core/scripts/safety/safety_monitor_node.py'
+
+>   ???
+E   FileNotFoundError: [Errno 2] No such file or directory: '/tmp/uam_task10_prefix/catkin_ws/src/uav_contact_core/scripts/safety/safety_monitor_node.py'
+
+<frozen importlib._bootstrap_external>:1037: FileNotFoundError
+=========================== short test summary info ============================
+FAILED ../../../../tmp/uam_task10_prefix/catkin_ws/src/uav_contact_core/tests/test_safety_monitor.py::test_roll_limit_triggers_state
+1 failed in 0.06s
+
+Post-fix pass confirmation
+Command:
+python3 -m pytest -q "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_safety_monitor.py"
+
+Output:
+.                                                                        [100%]
+1 passed in 0.06s
