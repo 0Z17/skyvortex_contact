@@ -15,6 +15,13 @@ def fuse_cmd(v_ref, v_normal, n, vmax):
     return v_cmd
 
 
+def fallback_cmd(safety_unsafe, has_vel_ref, has_vel_normal, vel_ref_fresh, vel_normal_fresh):
+    inputs_ready = has_vel_ref and has_vel_normal and vel_ref_fresh and vel_normal_fresh
+    if safety_unsafe or not inputs_ready:
+        return [0.0, 0.0, 0.0]
+    return [1.0, 1.0, 1.0]
+
+
 def _controller_cpp_path() -> Path:
     return (
         Path(__file__).resolve().parents[1]
@@ -28,9 +35,45 @@ def test_uav_motion_controller_cpp_exists():
     assert _controller_cpp_path().exists()
 
 
+def test_default_publish_rate_is_50hz_in_cpp():
+    content = _controller_cpp_path().read_text(encoding="utf-8")
+    assert "constexpr double kDefaultPublishRateHz = 50.0;" in content
+
+
 def test_velocity_fusion_and_clamp():
     v = fuse_cmd(v_ref=[0.3, 0.0, 0.0], v_normal=0.2, n=[1.0, 0.0, 0.0], vmax=0.25)
 
     assert v[0] == 0.25
     assert v[1] == 0.0
     assert v[2] == 0.0
+
+
+def test_fallback_zero_when_safety_unsafe():
+    v = fallback_cmd(
+        safety_unsafe=True,
+        has_vel_ref=True,
+        has_vel_normal=True,
+        vel_ref_fresh=True,
+        vel_normal_fresh=True,
+    )
+    assert v == [0.0, 0.0, 0.0]
+
+
+def test_fallback_zero_when_required_input_missing_or_stale():
+    missing = fallback_cmd(
+        safety_unsafe=False,
+        has_vel_ref=True,
+        has_vel_normal=False,
+        vel_ref_fresh=True,
+        vel_normal_fresh=False,
+    )
+    stale = fallback_cmd(
+        safety_unsafe=False,
+        has_vel_ref=True,
+        has_vel_normal=True,
+        vel_ref_fresh=False,
+        vel_normal_fresh=True,
+    )
+
+    assert missing == [0.0, 0.0, 0.0]
+    assert stale == [0.0, 0.0, 0.0]

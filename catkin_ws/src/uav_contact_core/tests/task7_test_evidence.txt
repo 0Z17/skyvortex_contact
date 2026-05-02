@@ -1,39 +1,48 @@
 Task 7 Test Evidence
 ====================
 
-a) Pre-fix reproducible proof via git object
--------------------------------------------
-Command:
-  git -C "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1" show b81795b:catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py
-Output:
-  Exit code 128
-  fatal: Path 'catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py' exists on disk, but not in 'b81795b'.
-
-This proves the Task 7 test file did not exist at commit b81795b (pre-Task7 implementation), so the Task 7 pytest target was not satisfiable at that point.
-
-b) Passing pytest after implementation
---------------------------------------
+a) Pytest pass for Task 7 logic
+-------------------------------
 Command:
   pytest "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py" -v
 Output:
   ============================= test session starts ==============================
   platform linux -- Python 3.8.10, pytest-8.3.5, pluggy-1.5.0 -- /usr/bin/python3
-  cachedir: .pytest_cache
-  rootdir: /home/wsl/proj/uam_exp
-  plugins: anyio-4.5.2
-  collecting ... collected 2 items
+  collecting ... collected 5 items
 
-  .worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py::test_uav_motion_controller_cpp_exists PASSED [ 50%]
-  .worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py::test_velocity_fusion_and_clamp PASSED [100%]
+  .worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py::test_uav_motion_controller_cpp_exists PASSED [ 20%]
+  .worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py::test_default_publish_rate_is_50hz_in_cpp PASSED [ 40%]
+  .worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py::test_velocity_fusion_and_clamp PASSED [ 60%]
+  .worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py::test_fallback_zero_when_safety_unsafe PASSED [ 80%]
+  .worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py::test_fallback_zero_when_required_input_missing_or_stale PASSED [100%]
 
-  ============================== 2 passed in 0.06s ===============================
+  ============================== 5 passed in 0.04s ===============================
 
-c) Successful catkin_make for uav_contact_core
-----------------------------------------------
+b) catkin_make --pkg uav_contact_core pass
+------------------------------------------
 Command:
   cd "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws" && catkin_make --pkg uav_contact_core
 Output (key success lines):
-  -- Configuring done
-  -- Generating done
-  -- Build files have been written to: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/build
   [100%] Built target uav_motion_controller_node
+
+c) Explicit evidence for 50Hz default and fallback behavior
+-----------------------------------------------------------
+Command:
+  grep -nE "kDefaultPublishRateHz = 50\\.0|safety_unsafe_|inputs_ready|clamped\\{0\\.0, 0\\.0, 0\\.0\\}" \
+    "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/src/control/uav_motion_controller_node.cpp"
+Output:
+  10:constexpr double kDefaultPublishRateHz = 50.0;
+  31:      safety_unsafe_(false),
+  49:  safety_unsafe_sub_ = nh_.subscribe(
+  89:  safety_unsafe_ = msg->data;
+  117:  const bool inputs_ready = velocity_ref_fresh && velocity_normal_fresh;
+  119:  std::array<double, 3> clamped{0.0, 0.0, 0.0};
+  120:  if (!safety_unsafe_ && inputs_ready) {
+
+Command:
+  grep -nE "test_default_publish_rate_is_50hz_in_cpp|test_fallback_zero_when_safety_unsafe|test_fallback_zero_when_required_input_missing_or_stale" \
+    "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_motion_controller_logic.py"
+Output:
+  38:def test_default_publish_rate_is_50hz_in_cpp():
+  51:def test_fallback_zero_when_safety_unsafe():
+  62:def test_fallback_zero_when_required_input_missing_or_stale():

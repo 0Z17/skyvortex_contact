@@ -7,7 +7,7 @@ namespace uav_contact_core {
 
 namespace {
 constexpr double kDefaultMaxVelocity = 0.25;
-constexpr double kDefaultPublishRateHz = 30.0;
+constexpr double kDefaultPublishRateHz = 50.0;
 constexpr uint16_t kVelocityOnlyTypeMask =
     mavros_msgs::PositionTarget::IGNORE_PX |
     mavros_msgs::PositionTarget::IGNORE_PY |
@@ -26,9 +26,16 @@ UavMotionControllerNode::UavMotionControllerNode()
       n_{1.0, 0.0, 0.0},
       v_normal_cmd_(0.0),
       max_velocity_(kDefaultMaxVelocity),
-      publish_rate_hz_(kDefaultPublishRateHz) {
+      publish_rate_hz_(kDefaultPublishRateHz),
+      input_timeout_sec_(0.5),
+      safety_unsafe_(false),
+      has_velocity_ref_(false),
+      has_velocity_normal_cmd_(false),
+      last_velocity_ref_time_(0.0),
+      last_velocity_normal_cmd_time_(0.0) {
   pnh_.param("max_velocity", max_velocity_, max_velocity_);
   pnh_.param("publish_rate_hz", publish_rate_hz_, publish_rate_hz_);
+  pnh_.param("input_timeout_sec", input_timeout_sec_, input_timeout_sec_);
 
   vel_ref_sub_ = nh_.subscribe("velocity_ref", 10,
                                &UavMotionControllerNode::VelocityRefCallback,
@@ -39,6 +46,9 @@ UavMotionControllerNode::UavMotionControllerNode()
   normal_sub_ = nh_.subscribe("surface_normal", 10,
                               &UavMotionControllerNode::SurfaceNormalCallback,
                               this);
+  safety_unsafe_sub_ = nh_.subscribe(
+      "safety_unsafe", 10,
+      &UavMotionControllerNode::SafetyUnsafeCallback, this);
 
   setpoint_pub_ = nh_.advertise<mavros_msgs::PositionTarget>(
       "/mavros/setpoint_raw/local", 10);
@@ -56,11 +66,15 @@ void UavMotionControllerNode::VelocityRefCallback(
   v_ref_[0] = msg->x;
   v_ref_[1] = msg->y;
   v_ref_[2] = msg->z;
+  has_velocity_ref_ = true;
+  last_velocity_ref_time_ = ros::Time::now();
 }
 
 void UavMotionControllerNode::VelocityNormalCallback(
     const std_msgs::Float64::ConstPtr& msg) {
   v_normal_cmd_ = msg->data;
+  has_velocity_normal_cmd_ = true;
+  last_velocity_normal_cmd_time_ = ros::Time::now();
 }
 
 void UavMotionControllerNode::SurfaceNormalCallback(
@@ -68,6 +82,11 @@ void UavMotionControllerNode::SurfaceNormalCallback(
   n_[0] = msg->x;
   n_[1] = msg->y;
   n_[2] = msg->z;
+}
+
+void UavMotionControllerNode::SafetyUnsafeCallback(
+    const std_msgs::Bool::ConstPtr& msg) {
+  safety_unsafe_ = msg->data;
 }
 
 std::array<double, 3> UavMotionControllerNode::FuseVelocityCommand() const {
@@ -88,8 +107,20 @@ std::array<double, 3> UavMotionControllerNode::ClampNorm(
 }
 
 void UavMotionControllerNode::PublishSetpoint() {
-  const std::array<double, 3> fused = FuseVelocityCommand();
-  const std::array<double, 3> clamped = ClampNorm(fused);
+  const ros::Time now = ros::Time::now();
+  const bool velocity_ref_fresh =
+      has_velocity_ref_ &&
+      ((now - last_velocity_ref_time_).toSec() <= input_timeout_sec_);
+  const bool velocity_normal_fresh =
+      has_velocity_normal_cmd_ &&
+      ((now - last_velocity_normal_cmd_time_).toSec() <= input_timeout_sec_);
+  const bool inputs_ready = velocity_ref_fresh && velocity_normal_fresh;
+
+  std::array<double, 3> clamped{0.0, 0.0, 0.0};
+  if (!safety_unsafe_ && inputs_ready) {
+    const std::array<double, 3> fused = FuseVelocityCommand();
+    clamped = ClampNorm(fused);
+  }
 
   mavros_msgs::PositionTarget msg;
   msg.header.stamp = ros::Time::now();
