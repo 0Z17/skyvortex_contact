@@ -3,6 +3,7 @@ set -euo pipefail
 
 map_file="catkin_ws/src/uav_contact_core/legacy/migration_map.md"
 legacy_dir="catkin_ws/src/uav_contact_core/legacy/reference_snapshot"
+package_root="catkin_ws/src/uav_contact_core"
 
 # migration_map.md must exist and be non-empty
 [ -s "$map_file" ]
@@ -32,7 +33,7 @@ while IFS= read -r line; do
   dest_part="${line#* -> }"
   dest="${dest_part% (planned)}"
 
-  if [ -f "$dest" ]; then
+  if [[ "$dest" == "$package_root/"* ]] && [ -f "$dest" ]; then
     continue
   fi
 
