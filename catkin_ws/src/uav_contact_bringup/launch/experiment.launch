@@ -1,0 +1,17 @@
+<launch>
+  <rosparam file="$(find uav_contact_bringup)/config/experiment.yaml" command="load"/>
+  <rosparam file="$(find uav_contact_bringup)/config/topics.yaml" command="load"/>
+  <rosparam file="$(find uav_contact_bringup)/config/task_manager.yaml" command="load"/>
+  <rosparam file="$(find uav_contact_bringup)/config/trajectory.yaml" command="load"/>
+  <rosparam file="$(find uav_contact_bringup)/config/contact_controller.yaml" command="load"/>
+  <rosparam file="$(find uav_contact_bringup)/config/uav_motion_controller.yaml" command="load"/>
+  <rosparam file="$(find uav_contact_bringup)/config/kinematics.yaml" command="load"/>
+  <rosparam file="$(find uav_contact_bringup)/config/servo.yaml" command="load"/>
+  <rosparam file="$(find uav_contact_bringup)/config/safety.yaml" command="load"/>
+
+  <node pkg="uav_contact_core" type="task_manager_node.py" name="task_manager_node" output="screen"/>
+  <node pkg="uav_contact_core" type="trajectory_server_node.py" name="trajectory_server" output="screen"/>
+  <node pkg="uav_contact_core" type="end_effector_kinematics_node.py" name="end_effector_kinematics" output="screen"/>
+  <node pkg="uav_contact_core" type="safety_monitor_node.py" name="safety_monitor" output="screen"/>
+  <node pkg="uav_contact_core" type="uav_motion_controller_node" name="uav_motion_controller_node" output="screen"/>
+</launch>

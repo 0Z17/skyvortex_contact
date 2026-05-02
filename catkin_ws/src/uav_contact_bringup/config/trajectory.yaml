@@ -1,0 +1,3 @@
+trajectory_server:
+  path_csv: "$(find uav_contact_core)/data/exp_path.csv"
+  publish_rate_hz: 10.0

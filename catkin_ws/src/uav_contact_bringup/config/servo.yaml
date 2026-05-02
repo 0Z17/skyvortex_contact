@@ -1,0 +1,5 @@
+joint_servo_bridge:
+  joint_min: -1.57
+  joint_max: 1.57
+  pwm_min: 500
+  pwm_max: 2500

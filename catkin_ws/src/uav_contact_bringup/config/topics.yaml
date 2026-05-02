@@ -1,0 +1,6 @@
+topics:
+  velocity_ref: "/uav_contact/velocity_ref"
+  velocity_normal_cmd: "/uav_contact/velocity_normal_cmd"
+  surface_normal: "/uav_contact/surface_normal"
+  safety_unsafe: "/uav_contact/safety_unsafe"
+  setpoint_raw_local: "/mavros/setpoint_raw/local"

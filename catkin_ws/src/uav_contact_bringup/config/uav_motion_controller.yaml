@@ -1,0 +1,4 @@
+uav_motion_controller_node:
+  max_velocity: 0.25
+  publish_rate_hz: 50.0
+  input_timeout_sec: 0.5
