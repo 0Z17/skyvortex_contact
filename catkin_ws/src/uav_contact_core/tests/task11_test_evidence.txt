@@ -58,3 +58,29 @@ python3 -m pytest -q "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-bas
 Output:
 ....                                                                     [100%]
 4 passed in 0.60s
+
+Post-fix launch validation after node install + executable-bit fix
+Command:
+source "/opt/ros/noetic/setup.bash" && source "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/devel/setup.bash" && timeout 20 roslaunch uav_contact_bringup experiment.launch
+
+Output:
+Exit code 124
+[INFO] [1777736668.597861]: Safety monitor baseline node started
+[INFO] [1777736668.368480]: End-effector kinematics baseline node started
+[INFO] [1777736668.520729]: Trajectory server baseline node started
+...
+NODES
+  /
+    end_effector_kinematics (uav_contact_core/end_effector_kinematics_node.py)
+    safety_monitor (uav_contact_core/safety_monitor_node.py)
+    task_manager_node (uav_contact_core/task_manager_node.py)
+    trajectory_server (uav_contact_core/trajectory_server_node.py)
+    uav_motion_controller_node (uav_contact_core/uav_motion_controller_node)
+...
+process[task_manager_node-2]: started with pid [69611]
+process[trajectory_server-3]: started with pid [69612]
+process[end_effector_kinematics-4]: started with pid [69613]
+process[safety_monitor-5]: started with pid [69614]
+process[uav_motion_controller_node-6]: started with pid [69615]
+...
+done

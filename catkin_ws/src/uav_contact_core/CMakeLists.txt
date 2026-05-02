@@ -28,5 +28,7 @@ target_link_libraries(uav_motion_controller_node
 catkin_install_python(PROGRAMS
   scripts/task/task_manager_node.py
   scripts/trajectory/trajectory_server_node.py
+  scripts/kinematics/end_effector_kinematics_node.py
+  scripts/safety/safety_monitor_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
