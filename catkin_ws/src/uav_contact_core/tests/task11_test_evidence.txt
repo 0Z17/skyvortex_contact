@@ -1,0 +1,60 @@
+Task 11 review-gap evidence: bringup config consumption alignment
+
+Pre-fix failing launch check (before Task 11 code fixes)
+Command:
+source "/opt/ros/noetic/setup.bash" && source "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/devel/setup.bash" && timeout 20 roslaunch uav_contact_bringup experiment.launch
+
+Output:
+Exit code 124
+[INFO] [1777735765.824403]: Trajectory server baseline node started
+WARNING: disk usage in log directory [/home/wsl/.ros/log] is over 1GB.
+It's recommended that you use the 'rosclean' command.
+ERROR: cannot launch node of type [uav_contact_core/end_effector_kinematics_node.py]: Cannot locate node of type [end_effector_kinematics_node.py] in package [uav_contact_core]. Make sure file exists in package path and permission is set to executable (chmod +x)
+ERROR: cannot launch node of type [uav_contact_core/safety_monitor_node.py]: Cannot locate node of type [safety_monitor_node.py] in package [uav_contact_core]. Make sure file exists in package path and permission is set to executable (chmod +x)
+...
+PARAMETERS
+ * /task_manager/publish_rate_hz: 10.0
+ * /trajectory_server/path_csv: $(find uav_contac...
+ * /trajectory_server/publish_rate_hz: 10.0
+...
+process[task_manager_node-2]: started with pid [66294]
+process[trajectory_server-3]: started with pid [66295]
+process[uav_motion_controller_node-6]: started with pid [66296]
+...
+done
+
+Post-fix launch validation (after Task 11 code fixes)
+Command:
+source "/opt/ros/noetic/setup.bash" && source "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/devel/setup.bash" && timeout 20 roslaunch uav_contact_bringup experiment.launch
+
+Output:
+Exit code 124
+[INFO] [1777735903.218110]: Trajectory server baseline node started
+WARNING: disk usage in log directory [/home/wsl/.ros/log] is over 1GB.
+It's recommended that you use the 'rosclean' command.
+ERROR: cannot launch node of type [uav_contact_core/end_effector_kinematics_node.py]: Cannot locate node of type [end_effector_kinematics_node.py] in package [uav_contact_core]. Make sure file exists in package path and permission is set to executable (chmod +x)
+ERROR: cannot launch node of type [uav_contact_core/safety_monitor_node.py]: Cannot locate node of type [safety_monitor_node.py] in package [uav_contact_core]. Make sure file exists in package path and permission is set to executable (chmod +x)
+...
+PARAMETERS
+ * /task_manager/publish_rate_hz: 10.0
+ * /trajectory_server/path_csv: $(find uav_contac...
+ * /trajectory_server/publish_rate_hz: 10.0
+...
+process[task_manager_node-2]: started with pid [66849]
+process[trajectory_server-3]: started with pid [66850]
+process[uav_motion_controller_node-6]: started with pid [66851]
+...
+done
+
+Relevant regression checks
+Command:
+python3 -m pytest -q "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_task_manager.py"
+Output:
+...                                                                      [100%]
+3 passed in 2.24s
+
+Command:
+python3 -m pytest -q "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_trajectory_server.py"
+Output:
+....                                                                     [100%]
+4 passed in 0.60s

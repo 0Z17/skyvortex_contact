@@ -48,9 +48,10 @@ class TaskManagerNode:
         rospy.init_node("task_manager_node", anonymous=False)
         self.phase_pub = rospy.Publisher("~task_phase", String, queue_size=10)
         self.manager = TaskManager(phase_publisher=self.phase_pub)
+        self.publish_rate_hz = float(rospy.get_param("/task_manager/publish_rate_hz", 10.0))
 
     def spin(self):
-        rate = rospy.Rate(10)
+        rate = rospy.Rate(self.publish_rate_hz)
         while not rospy.is_shutdown():
             self.manager.publish_phase()
             rate.sleep()
