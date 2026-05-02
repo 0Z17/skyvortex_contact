@@ -4,6 +4,8 @@ class DistPIDController:
         self.ki = float(ki)
         self.kd = float(kd)
         self.dt = float(dt)
+        if self.dt <= 0.0:
+            raise ValueError("dt must be > 0")
         self.v_max = float(v_max)
 
         self.integral = 0.0

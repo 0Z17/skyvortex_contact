@@ -1,0 +1,53 @@
+Task 6 test evidence
+
+Date: 2026-05-02
+Worktree: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1
+
+1) Pre-fix failure proof (baseline allows dt=0)
+
+Command:
+python3 - <<'PY'
+import subprocess
+import tempfile
+import importlib.util
+import sys
+
+rel = 'catkin_ws/src/uav_contact_core/scripts/control/dist_pid_controller.py'
+pre_src = subprocess.check_output(['git', 'show', f'HEAD:{rel}'], text=True)
+with tempfile.NamedTemporaryFile('w', suffix='.py', delete=False) as f:
+    f.write(pre_src)
+    temp_path = f.name
+
+spec = importlib.util.spec_from_file_location('dist_pid_pre', temp_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+try:
+    module.DistPIDController(kp=1.0, ki=0.0, kd=0.0, dt=0.0, v_max=0.2)
+except ValueError as exc:
+    print(f'PRE_FIX_RESULT: PASS (raised ValueError: {exc})')
+    sys.exit(0)
+else:
+    print('PRE_FIX_RESULT: FAIL (dt=0 did not raise ValueError)')
+    sys.exit(1)
+PY
+
+Output:
+PRE_FIX_RESULT: FAIL (dt=0 did not raise ValueError)
+
+Git object proof:
+git rev-parse HEAD:catkin_ws/src/uav_contact_core/scripts/control/dist_pid_controller.py
+=> e6b9b6f6bb3b4a4b917240878bde8156e885c193
+
+2) Post-fix pass proof (dt is guarded and tests pass)
+
+Command:
+pytest -q catkin_ws/src/uav_contact_core/tests/test_dist_pid_controller.py
+
+Output:
+..                                                                       [100%]
+2 passed in 0.02s
+
+Git object proof:
+git hash-object catkin_ws/src/uav_contact_core/scripts/control/dist_pid_controller.py
+=> a59cbd2d688317e63302e2906fb925074aeba0f1

@@ -1,6 +1,8 @@
 from pathlib import Path
 import importlib.util
 
+import pytest
+
 
 def _load_dist_pid_module():
     module_path = (
@@ -22,3 +24,10 @@ def test_compute_returns_zero_when_phase_disabled():
     output = controller.compute(distance=0.6, target_distance=0.3, phase_enabled=False)
 
     assert output == 0.0
+
+
+def test_constructor_raises_for_non_positive_dt():
+    module = _load_dist_pid_module()
+
+    with pytest.raises(ValueError, match="dt must be > 0"):
+        module.DistPIDController(kp=1.0, ki=0.0, kd=0.0, dt=0.0, v_max=0.2)
