@@ -1,0 +1,156 @@
+Task 5 test evidence for trajectory_server_node hardening
+
+Pre-fix reproducibility anchors (from git objects)
+- Baseline commit: ed59bb5700f4421e8051293c80cd015bf47c7be3
+- Baseline trajectory_server_node.py blob: 1c9576c28042ee4effce6402b41affe4087f7887
+
+Pre-fix failure evidence
+1) Command
+git -C "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1" show HEAD:catkin_ws/src/uav_contact_core/scripts/trajectory/trajectory_server_node.py > "/tmp/task5_prefx_trajectory_server_node.py" && cp "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_trajectory_server.py" "/tmp/task5_prefx_test_trajectory_server.py" && python3 -c 'from pathlib import Path; p=Path("/tmp/task5_prefx_test_trajectory_server.py"); s=p.read_text(); s=s.replace("Path(__file__).resolve().parents[1]\n        / \"scripts\"\n        / \"trajectory\"\n        / \"trajectory_server_node.py\"","Path(\"/tmp/task5_prefx_trajectory_server_node.py\")"); s=s.replace("Path(__file__).resolve().parents[1] / \"data\" / \"exp_path.csv\"","Path(\"/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/data/exp_path.csv\")"); p.write_text(s)' && pytest -q "/tmp/task5_prefx_test_trajectory_server.py"
+
+2) Output
+.FFF                                                                     [100%]
+=================================== FAILURES ===================================
+______________________ test_load_csv_missing_file_raises _______________________
+
+    def test_load_csv_missing_file_raises():
+        module = _load_trajectory_module()
+        server = module.TrajectoryServer()
+
+        with pytest.raises(FileNotFoundError, match="CSV file not found"):
+>           server.load_csv("/tmp/does-not-exist-task5.csv")
+
+/tmp/task5_prefx_test_trajectory_server.py:36:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+/tmp/task5_prefx_trajectory_server_node.py:14: in load_csv
+    with path.open("r", newline="") as csv_file:
+/usr/lib/python3.8/pathlib.py:1222: in open
+    return io.open(self, mode, buffering, encoding, errors, newline,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = PosixPath('/tmp/does-not-exist-task5.csv')
+name = '/tmp/does-not-exist-task5.csv', flags = 524288, mode = 438
+
+    def _opener(self, name, flags, mode=0o666):
+        # A stub for the opener argument to built-in open()
+>       return self._accessor.open(self, flags, mode)
+E       FileNotFoundError: [Errno 2] No such file or directory: '/tmp/does-not-exist-task5.csv'
+
+/usr/lib/python3.8/pathlib.py:1078: FileNotFoundError
+
+During handling of the above exception, another exception occurred:
+
+    def test_load_csv_missing_file_raises():
+        module = _load_trajectory_module()
+        server = module.TrajectoryServer()
+
+        with pytest.raises(FileNotFoundError, match="CSV file not found"):
+>           server.load_csv("/tmp/does-not-exist-task5.csv")
+E           AssertionError: Regex pattern did not match.
+E            Regex: 'CSV file not found'
+E            Input: "[Errno 2] No such file or directory: '/tmp/does-not-exist-task5.csv'"
+
+/tmp/task5_prefx_test_trajectory_server.py:36: AssertionError
+_________________ test_load_csv_missing_required_header_raises _________________
+
+tmp_path = PosixPath('/tmp/pytest-of-wsl/pytest-0/test_load_csv_missing_required0')
+
+    def test_load_csv_missing_required_header_raises(tmp_path):
+        module = _load_trajectory_module()
+        server = module.TrajectoryServer()
+        csv_path = tmp_path / "missing_header.csv"
+        csv_path.write_text("x,y,z\n0,0,1\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="Missing required CSV columns"):
+>           server.load_csv(csv_path)
+
+/tmp/task5_prefx_test_trajectory_server.py:46:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <trajectory_server_node.TrajectoryServer object at 0x7e1406547490>
+csv_path = PosixPath('/tmp/pytest-of-wsl/pytest-0/test_load_csv_missing_required0/missing_header.csv')
+
+    def load_csv(self, csv_path):
+        path = Path(csv_path)
+        waypoints = []
+        with path.open("r", newline="") as csv_file:
+            reader = csv.DictReader(csv_file)
+            for row in reader:
+                waypoints.append(
+                    (
+                        float(row["x"]),
+                        float(row["y"]),
+                        float(row["z"]),
+>                       float(row["yaw"]),
+                    )
+                )
+E               KeyError: 'yaw'
+
+/tmp/task5_prefx_trajectory_server_node.py:22: KeyError
+_______________________ test_load_csv_non_numeric_raises _______________________
+
+tmp_path = PosixPath('/tmp/pytest-of-wsl/pytest-0/test_load_csv_non_numeric_rais0')
+
+    def test_load_csv_non_numeric_raises(tmp_path):
+        module = _load_trajectory_module()
+        server = module.TrajectoryServer()
+        csv_path = tmp_path / "non_numeric.csv"
+        csv_path.write_text("x,y,z,yaw\n0,abc,1,0\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="Non-numeric value"):
+>           server.load_csv(csv_path)
+
+/tmp/task5_prefx_test_trajectory_server.py:56:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <trajectory_server_node.TrajectoryServer object at 0x7e1406798e80>
+csv_path = PosixPath('/tmp/pytest-of-wsl/pytest-0/test_load_csv_non_numeric_rais0/non_numeric.csv')
+
+    def load_csv(self, csv_path):
+        path = Path(csv_path)
+        waypoints = []
+        with path.open("r", newline="") as csv_file:
+            reader = csv.DictReader(csv_file)
+            for row in reader:
+                waypoints.append(
+                    (
+                        float(row["x"]),
+>                       float(row["y"]),
+                        float(row["z"]),
+                        float(row["yaw"]),
+                    )
+                )
+E               ValueError: could not convert string to float: 'abc'
+
+/tmp/task5_prefx_trajectory_server_node.py:20: ValueError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = PosixPath('/tmp/pytest-of-wsl/pytest-0/test_load_csv_non_numeric_rais0')
+
+    def test_load_csv_non_numeric_raises(tmp_path):
+        module = _load_trajectory_module()
+        server = module.TrajectoryServer()
+        csv_path = tmp_path / "non_numeric.csv"
+        csv_path.write_text("x,y,z,yaw\n0,abc,1,0\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="Non-numeric value"):
+>           server.load_csv(csv_path)
+E           AssertionError: Regex pattern did not match.
+E            Regex: 'Non-numeric value'
+E            Input: "could not convert string to float: 'abc'"
+
+/tmp/task5_prefx_test_trajectory_server.py:56: AssertionError
+=========================== short test summary info ============================
+FAILED ../../../../tmp/task5_prefx_test_trajectory_server.py::test_load_csv_missing_file_raises
+FAILED ../../../../tmp/task5_prefx_test_trajectory_server.py::test_load_csv_missing_required_header_raises
+FAILED ../../../../tmp/task5_prefx_test_trajectory_server.py::test_load_csv_non_numeric_raises
+3 failed, 1 passed in 0.27s
+
+Post-fix pass evidence
+1) Command
+pytest -q "/home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws/src/uav_contact_core/tests/test_trajectory_server.py"
+
+2) Output
+....                                                                     [100%]
+4 passed in 0.75s
