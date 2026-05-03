@@ -1,5 +1,17 @@
 joint_servo_bridge:
+  publish_rate_hz: 50.0
   joint_min: -1.57
   joint_max: 1.57
-  pwm_min: 500
-  pwm_max: 2500
+  neutral_theta: 0.0
+  enable_in_phases:
+    - 2
+    - 3
+    - 4
+    - 5
+  use_dynamixel: true
+  servo_joint_offset: 0.0
+  servo_operating_mode: 4
+  servo_profile_velocity: 30
+  dxl_id: 1
+  dxl_baudrate: 57600
+  dxl_devicename: "/dev/ttyUSB1"

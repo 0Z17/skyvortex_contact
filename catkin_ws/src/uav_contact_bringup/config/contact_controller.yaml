@@ -1,6 +1,11 @@
 contact_controller:
-  kp: 0.8
-  ki: 0.0
-  kd: 0.0
-  dt: 0.02
-  v_max: 0.25
+  rate: 50.0
+  desired_distance: 0.03
+  max_normal_velocity: 0.08
+  pid:
+    kp: 0.8
+    ki: 0.0
+    kd: 0.05
+  enabled_phases:
+    - 3
+    - 4

@@ -1,98 +1,142 @@
 #!/usr/bin/env python3
 
-"""Baseline end-effector kinematics node (state-estimation scaffold only)."""
+import math
+import numpy as np
+
+try:
+    import rospy
+    from geometry_msgs.msg import Twist
+    from uav_contact_msgs.msg import TrajectoryPoint
+except ImportError:  # pragma: no cover
+    rospy = None
+
+    class _Obj:
+        pass
+
+    class Twist:
+        def __init__(self):
+            self.linear = _Obj()
+            self.angular = _Obj()
+            self.linear.x = 0.0
+            self.linear.y = 0.0
+            self.linear.z = 0.0
+            self.angular.x = 0.0
+            self.angular.y = 0.0
+            self.angular.z = 0.0
+
+    class TrajectoryPoint:
+        def __init__(self):
+            self.x = 0.0
+            self.y = 0.0
+            self.z = 0.0
+            self.psi = 0.0
+            self.theta = 0.0
+            self.vx = 0.0
+            self.vy = 0.0
+            self.vz = 0.0
+            self.vpsi = 0.0
+            self.vtheta = 0.0
+            self.nx = 1.0
+            self.ny = 0.0
+            self.nz = 0.0
 
 
-def build_state():
-    return {
-        "position": {"x": 0.0, "y": 0.0, "z": 0.0},
-        "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-        "linear_velocity": {"x": 0.0, "y": 0.0, "z": 0.0},
-        "angular_velocity": {"x": 0.0, "y": 0.0, "z": 0.0},
-        "contact_normal": {"x": 0.0, "y": 0.0, "z": 1.0},
-        "estimated_wrench": {
-            "force": {"x": 0.0, "y": 0.0, "z": 0.0},
-            "torque": {"x": 0.0, "y": 0.0, "z": 0.0},
-        },
-        "distance": 0.3,
-        "in_contact": False,
-    }
+class EndEffectorTwistController:
+    def __init__(self, link_length=0.7835, vel_factor=2.0, max_xy_speed=0.4):
+        self.link_length = float(link_length)
+        self.vel_factor = float(vel_factor)
+        self.max_xy_speed = float(max_xy_speed)
+        self.current_velocity = (0.0, 0.0, 0.0, 0.0, 0.0)
+        self.current_config = None
+        self.current_normal = (1.0, 0.0, 0.0)
 
+    def update_trajectory_reference(self, msg):
+        self.current_config = (
+            float(msg.x),
+            float(msg.y),
+            float(msg.z),
+            float(msg.psi),
+            float(msg.theta),
+        )
+        self.current_velocity = (
+            float(msg.vx),
+            float(msg.vy),
+            float(msg.vz),
+            float(msg.vpsi),
+            float(msg.vtheta),
+        )
+        self.current_normal = (float(msg.nx), float(msg.ny), float(msg.nz))
 
-class EndEffectorKinematicsNode:
-    def __init__(self, publisher=None):
-        self.publisher = publisher
+    def _jacobian(self, config):
+        psi = config[3]
+        theta = config[4]
+        l = self.link_length
+        return [
+            [1.0, 0.0, 0.0, -l * math.cos(theta) * math.sin(psi), -l * math.cos(psi) * math.sin(theta)],
+            [0.0, 1.0, 0.0,  l * math.cos(theta) * math.cos(psi),  -l * math.sin(theta) * math.sin(psi)],
+            [0.0, 0.0, 1.0,  0.0,                                  -l * math.cos(theta)],
+            [0.0, 0.0, 0.0,  1.0,                                   0.0],
+            [0.0, 0.0, 0.0,  0.0,                                   1.0],
+        ]
 
-    def build_and_publish(self):
-        state = build_state()
-        if self.publisher is not None:
-            self.publisher.publish(state)
-        return state
+    @staticmethod
+    def _normalize(v, fallback):
+        vec = np.asarray(v, dtype=float)
+        norm = np.linalg.norm(vec)
+        if norm <= 1e-9:
+            return np.asarray(fallback, dtype=float)
+        return vec / norm
+
+    def compute_twist(self):
+        msg = Twist()
+        if self.current_config is None:
+            return msg
+
+        vel_vec = np.array(self.current_velocity, dtype=float)
+        jac = np.array(self._jacobian(self.current_config), dtype=float)
+        vel_end = jac @ vel_vec
+
+        n = self._normalize(self.current_normal, [1.0, 0.0, 0.0])
+        ex = self._normalize(np.cross(np.array([0.0, 0.0, 1.0]), n), [1.0, 0.0, 0.0])
+        ey = self._normalize(np.cross(n, ex), [0.0, 1.0, 0.0])
+
+        vx = float(np.dot(vel_end[:3], ex)) * self.vel_factor
+        vy = float(np.dot(vel_end[:3], ey)) * self.vel_factor
+
+        vx = max(min(vx, self.max_xy_speed), -self.max_xy_speed)
+        vy = max(min(vy, self.max_xy_speed), -self.max_xy_speed)
+
+        msg.linear.x = -vx
+        msg.linear.y = vy
+        msg.linear.z = 0.0
+        return msg
 
 
 def main():
-    try:
-        import rospy
-        from geometry_msgs.msg import Pose, Twist, Vector3, Wrench
-        from std_msgs.msg import Float64
-        from uav_contact_msgs.msg import EndEffectorState
-    except ImportError as exc:
-        raise RuntimeError(
-            "rospy, geometry_msgs, std_msgs, and uav_contact_msgs are required to run end_effector_kinematics_node.py"
-        ) from exc
-
-    class _EndEffectorPublisherAdapter:
-        def __init__(self, ros_publisher, distance_publisher=None):
-            self._ros_publisher = ros_publisher
-            self._distance_publisher = distance_publisher
-
-        def publish(self, state):
-            msg = EndEffectorState()
-            msg.header.stamp = rospy.Time.now()
-            msg.pose = Pose()
-            msg.pose.position.x = float(state["position"]["x"])
-            msg.pose.position.y = float(state["position"]["y"])
-            msg.pose.position.z = float(state["position"]["z"])
-            msg.pose.orientation.x = float(state["orientation"]["x"])
-            msg.pose.orientation.y = float(state["orientation"]["y"])
-            msg.pose.orientation.z = float(state["orientation"]["z"])
-            msg.pose.orientation.w = float(state["orientation"]["w"])
-            msg.twist = Twist()
-            msg.twist.linear.x = float(state["linear_velocity"]["x"])
-            msg.twist.linear.y = float(state["linear_velocity"]["y"])
-            msg.twist.linear.z = float(state["linear_velocity"]["z"])
-            msg.twist.angular.x = float(state["angular_velocity"]["x"])
-            msg.twist.angular.y = float(state["angular_velocity"]["y"])
-            msg.twist.angular.z = float(state["angular_velocity"]["z"])
-            msg.contact_normal = Vector3(
-                x=float(state["contact_normal"]["x"]),
-                y=float(state["contact_normal"]["y"]),
-                z=float(state["contact_normal"]["z"]),
-            )
-            msg.estimated_wrench = Wrench()
-            msg.estimated_wrench.force.x = float(state["estimated_wrench"]["force"]["x"])
-            msg.estimated_wrench.force.y = float(state["estimated_wrench"]["force"]["y"])
-            msg.estimated_wrench.force.z = float(state["estimated_wrench"]["force"]["z"])
-            msg.estimated_wrench.torque.x = float(state["estimated_wrench"]["torque"]["x"])
-            msg.estimated_wrench.torque.y = float(state["estimated_wrench"]["torque"]["y"])
-            msg.estimated_wrench.torque.z = float(state["estimated_wrench"]["torque"]["z"])
-            msg.in_contact = bool(state["in_contact"])
-            self._ros_publisher.publish(msg)
-            if self._distance_publisher is not None:
-                self._distance_publisher.publish(Float64(data=float(state["distance"])))
+    if rospy is None:
+        raise RuntimeError("rospy, geometry_msgs and uav_contact_msgs are required")
 
     rospy.init_node("end_effector_kinematics", anonymous=False)
-    rospy.loginfo("End-effector kinematics baseline node started")
-    state_publisher = rospy.Publisher("/uav_contact/ee/state", EndEffectorState, queue_size=10)
-    distance_publisher = rospy.Publisher("/uav_contact/distance", Float64, queue_size=10)
-    node = EndEffectorKinematicsNode(
-        publisher=_EndEffectorPublisherAdapter(state_publisher, distance_publisher)
+
+    publish_rate_hz = float(rospy.get_param("~publish_rate_hz", 30.0))
+    controller = EndEffectorTwistController(
+        link_length=float(rospy.get_param("~link_length", 0.7835)),
+        vel_factor=float(rospy.get_param("~vel_factor", 2.0)),
+        max_xy_speed=float(rospy.get_param("~max_xy_speed", 0.4)),
     )
-    publish_rate_hz = rospy.get_param("~publish_rate_hz", 10.0)
+
+    twist_pub = rospy.Publisher("/end_effector_velocity", Twist, queue_size=10)
+
+    def _trajectory_ref_callback(msg):
+        controller.update_trajectory_reference(msg)
+
+    rospy.Subscriber("/uav_contact/trajectory/reference", TrajectoryPoint, _trajectory_ref_callback, queue_size=10)
+
     rate = rospy.Rate(publish_rate_hz)
+    rospy.loginfo("End-effector twist controller started")
 
     while not rospy.is_shutdown():
-        node.build_and_publish()
+        twist_pub.publish(controller.compute_twist())
         rate.sleep()
 
 

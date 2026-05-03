@@ -1,128 +1,161 @@
 #!/usr/bin/env python3
 
-try:
-    import rospy
-    from std_msgs.msg import Bool
-    from uav_contact_msgs.msg import TaskPhase
-except ImportError:  # pragma: no cover - allows tests without ROS runtime
-    rospy = None
-
-    class Bool:
-        def __init__(self, data=False):
-            self.data = bool(data)
-
-    class TaskPhase:  # minimal fallback for non-ROS test environments
-        PHASE_IDLE = "IDLE"
-        PHASE_APPROACH = "APPROACH"
-        PHASE_ALIGN = "ALIGN"
-        PHASE_CONTACT = "CONTACT"
-        PHASE_TRACK = "TRACK"
-        PHASE_RELEASE = "RELEASE"
-        PHASE_ABORT = "ABORT"
-
-        def __init__(self):
-            self.phase = self.PHASE_IDLE
-            self.progress = 0.0
-            self.active_constraints = []
-
-
-class TaskManager:
-    """Minimal Task 4 baseline task manager with explicit phases."""
-
-    PHASES_ENABLED_FOR_CONTACT_CONTROL = {
-        TaskPhase.PHASE_APPROACH,
-        TaskPhase.PHASE_ALIGN,
-        TaskPhase.PHASE_CONTACT,
-        TaskPhase.PHASE_TRACK,
-    }
-
-    PHASE_SEQUENCE = [
-        TaskPhase.PHASE_IDLE,
-        TaskPhase.PHASE_APPROACH,
-        TaskPhase.PHASE_ALIGN,
-        TaskPhase.PHASE_CONTACT,
-        TaskPhase.PHASE_TRACK,
-        TaskPhase.PHASE_RELEASE,
-        TaskPhase.PHASE_ABORT,
-    ]
-
-    # Align local state values with TaskPhase message constants.
-    IDLE = TaskPhase.PHASE_IDLE
-    STABILIZE = TaskPhase.PHASE_ALIGN
-    APPROACH = TaskPhase.PHASE_APPROACH
-    INITIAL_CONTACT = TaskPhase.PHASE_CONTACT
-    SLIDING_CONTACT = TaskPhase.PHASE_TRACK
-    RETREAT = TaskPhase.PHASE_RELEASE
-    EMERGENCY_RETREAT = TaskPhase.PHASE_ABORT
-    FINISHED = TaskPhase.PHASE_IDLE
-    ERROR = TaskPhase.PHASE_ABORT
-
-    def __init__(self, phase_publisher=None):
-        self.phase = self.IDLE
-        self._phase_publisher = phase_publisher
-
-    def publish_phase(self):
-        if self._phase_publisher is None:
-            return
-        msg = TaskPhase()
-        msg.phase = self.phase
-        msg.progress = 0.0
-        msg.active_constraints = []
-        self._phase_publisher.publish(msg)
-
-    def is_phase_enabled(self):
-        return self.phase in self.PHASES_ENABLED_FOR_CONTACT_CONTROL
-
-    def on_safety_emergency(self):
-        if self.phase != self.EMERGENCY_RETREAT:
-            self.phase = self.EMERGENCY_RETREAT
-        self.publish_phase()
+import rospy
+from uav_contact_msgs.msg import TaskPhase, SafetyState
 
 
 class TaskManagerNode:
-    """Minimal ROS node scaffold for Task 4 baseline behavior."""
-
     def __init__(self):
-        if rospy is None:
-            raise RuntimeError("rospy is required to run TaskManagerNode")
+        rospy.init_node("task_manager", anonymous=False)
 
-        rospy.init_node("task_manager_node", anonymous=False)
-        self.phase_pub = rospy.Publisher("/uav_contact/task_phase", TaskPhase, queue_size=10)
-        self.phase_enabled_pub = rospy.Publisher("/uav_contact/phase_enabled", Bool, queue_size=10)
-        self.manager = TaskManager(phase_publisher=self.phase_pub)
-        self.publish_rate_hz = float(rospy.get_param("/task_manager/publish_rate_hz", 10.0))
+        self.rate_hz = rospy.get_param("/task_manager/rate", 20.0)
+        self.auto_start = rospy.get_param("/task_manager/auto_start", False)
+        self.stabilize_duration = rospy.get_param("/task_manager/stabilize_duration", 5.0)
+        self.approach_duration = rospy.get_param("/task_manager/approach_duration", 30.0)
+        self.initial_contact_duration = rospy.get_param("/task_manager/initial_contact_duration", 5.0)
+        self.retreat_duration = rospy.get_param("/task_manager/retreat_duration", 20.0)
+        self.gate_on_offboard_ready = bool(rospy.get_param("/task_manager/gate_on_offboard_ready", True))
+        self.offboard_ready_hold_sec = float(rospy.get_param("/task_manager/offboard_ready_hold_sec", 0.5))
 
-        auto_start = bool(rospy.get_param("/task_manager/auto_start", True))
-        initial_phase_param = rospy.get_param("/task_manager/initial_phase", TaskPhase.PHASE_APPROACH)
-        if auto_start:
-            self.manager.phase = self._resolve_initial_phase(initial_phase_param)
+        self.phase = TaskPhase.IDLE
+        self.phase_start_time = rospy.Time.now()
+        self.emergency_requested = False
+        self.safety_safe = False
+        self.offboard_ready_since = None
 
-    def _resolve_initial_phase(self, initial_phase_param):
-        if isinstance(initial_phase_param, int):
-            if 0 <= initial_phase_param < len(TaskManager.PHASE_SEQUENCE):
-                return TaskManager.PHASE_SEQUENCE[initial_phase_param]
-            return TaskPhase.PHASE_APPROACH
+        self.phase_pub = rospy.Publisher("/uav_contact/task/phase", TaskPhase, queue_size=10)
+        self.safety_sub = rospy.Subscriber("/uav_contact/safety/state", SafetyState, self._on_safety_state)
 
-        candidate = str(initial_phase_param).strip().upper()
-        if not candidate.startswith("PHASE_"):
-            candidate = f"PHASE_{candidate}"
+        rospy.loginfo("Task manager node started, phase=IDLE")
 
-        resolved = getattr(TaskPhase, candidate, None)
-        if resolved in TaskManager.PHASE_SEQUENCE:
-            return resolved
+    def _on_safety_state(self, msg):
+        self.safety_safe = bool(msg.safe)
+        if self.gate_on_offboard_ready and self.safety_safe:
+            if self.offboard_ready_since is None:
+                self.offboard_ready_since = rospy.Time.now()
+        else:
+            self.offboard_ready_since = None
 
-        return TaskPhase.PHASE_APPROACH
+        if msg.require_emergency_retreat and self.phase not in (
+            TaskPhase.EMERGENCY_RETREAT, TaskPhase.ERROR, TaskPhase.FINISHED
+        ):
+            rospy.logwarn("Emergency retreat requested by safety monitor: %s", msg.reason)
+            self.emergency_requested = True
+            self.phase = TaskPhase.EMERGENCY_RETREAT
+            self.phase_start_time = rospy.Time.now()
+
+    def _phase_duration(self):
+        return {
+            TaskPhase.STABILIZE: self.stabilize_duration,
+            TaskPhase.APPROACH: self.approach_duration,
+            TaskPhase.INITIAL_CONTACT: self.initial_contact_duration,
+            TaskPhase.SLIDING_CONTACT: float("inf"),
+            TaskPhase.RETREAT: self.retreat_duration,
+            TaskPhase.EMERGENCY_RETREAT: 10.0,
+        }
+
+    def _transition_map(self):
+        return {
+            TaskPhase.IDLE: TaskPhase.STABILIZE,
+            TaskPhase.STABILIZE: TaskPhase.APPROACH,
+            TaskPhase.APPROACH: TaskPhase.INITIAL_CONTACT,
+            TaskPhase.INITIAL_CONTACT: TaskPhase.SLIDING_CONTACT,
+            TaskPhase.SLIDING_CONTACT: TaskPhase.RETREAT,
+            TaskPhase.RETREAT: TaskPhase.FINISHED,
+        }
+
+    def _phase_enables(self):
+        return {
+            TaskPhase.IDLE: (False, False, False, False),
+            TaskPhase.STABILIZE: (False, False, False, True),
+            TaskPhase.APPROACH: (True, False, True, True),
+            TaskPhase.INITIAL_CONTACT: (True, True, True, True),
+            TaskPhase.SLIDING_CONTACT: (True, True, True, True),
+            TaskPhase.RETREAT: (True, False, True, True),
+            TaskPhase.EMERGENCY_RETREAT: (False, False, False, True),
+            TaskPhase.FINISHED: (False, False, False, False),
+            TaskPhase.ERROR: (False, False, False, False),
+        }
+
+    def _offboard_ready(self):
+        if not self.gate_on_offboard_ready:
+            return True
+        if self.offboard_ready_since is None:
+            return False
+        return (rospy.Time.now() - self.offboard_ready_since).to_sec() >= self.offboard_ready_hold_sec
+
+    def _update_phase(self):
+        if self.phase in (TaskPhase.FINISHED, TaskPhase.ERROR):
+            return
+
+        if self.phase == TaskPhase.EMERGENCY_RETREAT:
+            duration = self._phase_duration().get(TaskPhase.EMERGENCY_RETREAT, 10.0)
+            elapsed = (rospy.Time.now() - self.phase_start_time).to_sec()
+            if elapsed >= duration:
+                self.phase = TaskPhase.FINISHED
+                rospy.loginfo("Emergency retreat completed, moving to FINISHED")
+            return
+
+        if self.phase == TaskPhase.IDLE and self.auto_start:
+            if self._offboard_ready():
+                self.phase = TaskPhase.STABILIZE
+                self.phase_start_time = rospy.Time.now()
+                rospy.loginfo("Auto-starting: STABILIZE")
+            return
+
+        if self.phase == TaskPhase.SLIDING_CONTACT:
+            return
+
+        duration = self._phase_duration().get(self.phase)
+        elapsed = (rospy.Time.now() - self.phase_start_time).to_sec()
+        if duration and elapsed >= duration:
+            next_phase = self._transition_map().get(self.phase)
+            if next_phase is not None:
+                if next_phase == TaskPhase.APPROACH and not self._offboard_ready():
+                    return
+                self.phase = next_phase
+                self.phase_start_time = rospy.Time.now()
+                rospy.loginfo("Phase transition: %s", self._phase_to_name(next_phase))
+
+    def _phase_to_name(self, phase):
+        names = {
+            TaskPhase.IDLE: "IDLE",
+            TaskPhase.STABILIZE: "STABILIZE",
+            TaskPhase.APPROACH: "APPROACH",
+            TaskPhase.INITIAL_CONTACT: "INITIAL_CONTACT",
+            TaskPhase.SLIDING_CONTACT: "SLIDING_CONTACT",
+            TaskPhase.RETREAT: "RETREAT",
+            TaskPhase.EMERGENCY_RETREAT: "EMERGENCY_RETREAT",
+            TaskPhase.FINISHED: "FINISHED",
+            TaskPhase.ERROR: "ERROR",
+        }
+        return names.get(phase, "UNKNOWN")
+
+    def _publish_phase(self):
+        enables = self._phase_enables().get(self.phase, (False, False, False, False))
+        msg = TaskPhase()
+        msg.header.stamp = rospy.Time.now()
+        msg.phase = self.phase
+        msg.elapsed_time = (rospy.Time.now() - self.phase_start_time).to_sec()
+        msg.enable_trajectory = enables[0]
+        msg.enable_contact_control = enables[1]
+        msg.enable_servo = enables[2]
+        msg.enable_uav_control = enables[3]
+        msg.description = self._phase_to_name(self.phase)
+        self.phase_pub.publish(msg)
 
     def spin(self):
-        rate = rospy.Rate(self.publish_rate_hz)
+        rate = rospy.Rate(self.rate_hz)
         while not rospy.is_shutdown():
-            self.manager.publish_phase()
-            self.phase_enabled_pub.publish(Bool(data=self.manager.is_phase_enabled()))
+            self._update_phase()
+            self._publish_phase()
             rate.sleep()
 
 
-if __name__ == "__main__":
-    if rospy is None:
-        raise RuntimeError("rospy is not available")
+def main():
     node = TaskManagerNode()
     node.spin()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,4 +1,5 @@
 experiment:
-  name: "baseline_v1"
-  rate_hz: 50.0
+  name: uav_contact_exp
+  trajectory_file: "$(find uav_contact_core)/data/exp_path.csv"
+  namespace: "/uav_contact"
   use_sim_time: false

@@ -15,14 +15,21 @@ def _load_joint_servo_bridge_module():
     return module
 
 
-def test_map_joint_angle_to_pwm_applies_limits_and_linear_mapping():
+def test_joint_servo_bridge_tracks_latest_theta_with_phase_gate():
+    module = _load_joint_servo_bridge_module()
+    bridge = module.JointServoBridge(joint_min=-1.0, joint_max=1.0, neutral_theta=0.2)
+
+    bridge.update_theta(-0.5)
+    assert bridge.current_joint_command() == 0.2
+
+    bridge.set_phase_enabled(True)
+    assert bridge.current_joint_command() == -0.5
+
+
+
+def test_clamp_joint_angle_applies_limits():
     module = _load_joint_servo_bridge_module()
 
-    joint_min = -1.0
-    joint_max = 1.0
-    pwm_min = 1000
-    pwm_max = 2000
-
-    assert module.map_joint_angle_to_pwm(-2.0, joint_min, joint_max, pwm_min, pwm_max) == 1000
-    assert module.map_joint_angle_to_pwm(2.0, joint_min, joint_max, pwm_min, pwm_max) == 2000
-    assert module.map_joint_angle_to_pwm(0.0, joint_min, joint_max, pwm_min, pwm_max) == 1500
+    assert module.clamp_joint_angle(-2.0, -1.0, 1.0) == -1.0
+    assert module.clamp_joint_angle(2.0, -1.0, 1.0) == 1.0
+    assert module.clamp_joint_angle(0.0, -1.0, 1.0) == 0.0

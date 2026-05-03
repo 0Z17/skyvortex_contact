@@ -1,9 +1,15 @@
-# Safety and interlock status for contact operations.
-
 std_msgs/Header header
-bool armed
-bool e_stop
-bool watchdog_ok
-bool geofence_ok
-bool contact_force_ok
+
+uint8 NORMAL=0
+uint8 CONTACT_LOSS=1
+uint8 DISTANCE_JUMP=2
+uint8 ATTITUDE_LIMIT_EXCEEDED=3
+uint8 MAVROS_DISCONNECTED=4
+uint8 SENSOR_TIMEOUT=5
+uint8 EMERGENCY_RETREAT_REQUIRED=6
+uint8 ERROR=7
+
+uint8 state
+bool safe
+bool require_emergency_retreat
 string reason

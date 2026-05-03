@@ -1,2 +1,6 @@
 end_effector_kinematics:
-  publish_rate_hz: 10.0
+  publish_rate_hz: 50.0
+  tool_offset_x: 0.0
+  tool_offset_y: 0.0
+  tool_offset_z: 0.0
+  link_length: 0.3

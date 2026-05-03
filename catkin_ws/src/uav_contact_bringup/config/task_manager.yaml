@@ -1,4 +1,9 @@
 task_manager:
-  publish_rate_hz: 10.0
+  rate: 20.0
   auto_start: true
-  initial_phase: APPROACH
+  stabilize_duration: 5.0
+  approach_duration: 30.0
+  initial_contact_duration: 5.0
+  retreat_duration: 20.0
+  gate_on_offboard_ready: true
+  offboard_ready_hold_sec: 0.5

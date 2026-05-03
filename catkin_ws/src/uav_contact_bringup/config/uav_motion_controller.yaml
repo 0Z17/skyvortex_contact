@@ -1,4 +1,8 @@
 uav_motion_controller_node:
   max_velocity: 0.25
+  max_normal_velocity: 0.08
+  max_tangent_velocity: 0.15
+  tangent_position_kp: 0.5
   publish_rate_hz: 50.0
   input_timeout_sec: 0.5
+  zero_when_not_offboard_ready: true

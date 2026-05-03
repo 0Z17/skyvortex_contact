@@ -1,15 +1,19 @@
-# High-level contact task phase.
-# Use string constants for readable state transitions.
-
 std_msgs/Header header
-string phase
-float32 progress
-string[] active_constraints
 
-string PHASE_IDLE=IDLE
-string PHASE_APPROACH=APPROACH
-string PHASE_ALIGN=ALIGN
-string PHASE_CONTACT=CONTACT
-string PHASE_TRACK=TRACK
-string PHASE_RELEASE=RELEASE
-string PHASE_ABORT=ABORT
+uint8 IDLE=0
+uint8 STABILIZE=1
+uint8 APPROACH=2
+uint8 INITIAL_CONTACT=3
+uint8 SLIDING_CONTACT=4
+uint8 RETREAT=5
+uint8 EMERGENCY_RETREAT=6
+uint8 FINISHED=7
+uint8 ERROR=8
+
+uint8 phase
+float64 elapsed_time
+bool enable_trajectory
+bool enable_contact_control
+bool enable_servo
+bool enable_uav_control
+string description

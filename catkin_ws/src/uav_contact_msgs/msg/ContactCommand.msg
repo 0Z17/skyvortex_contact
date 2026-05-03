@@ -1,9 +1,9 @@
-# Commanded interaction targets for the contact controller.
-
 std_msgs/Header header
-uav_contact_msgs/TaskPhase target_phase
-geometry_msgs/PoseStamped target_pose
-geometry_msgs/Twist target_twist
-geometry_msgs/Wrench target_wrench
-float32 max_contact_force
-bool hold_position
+
+bool enabled
+geometry_msgs/Vector3 normal_direction
+float64 normal_velocity
+float64 normal_offset
+float64 distance_error
+float64 measured_distance
+float64 desired_distance

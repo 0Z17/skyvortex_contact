@@ -15,34 +15,37 @@ def _load_end_effector_module():
     return module
 
 
-def test_state_contains_pose_twist_and_contact_fields():
+def test_compute_twist_returns_zero_without_trajectory():
     module = _load_end_effector_module()
-    state = module.build_state()
+    controller = module.EndEffectorTwistController()
 
-    assert "position" in state
-    assert "orientation" in state
-    assert "linear_velocity" in state
-    assert "angular_velocity" in state
-    assert "contact_normal" in state
-    assert "estimated_wrench" in state
-    assert "in_contact" in state
-    assert "distance" in state
+    twist = controller.compute_twist()
+
+    assert twist.linear.x == 0.0
+    assert twist.linear.y == 0.0
 
 
-def test_build_and_publish_emits_state_once_with_fake_publisher():
+def test_compute_twist_generates_xy_velocity_from_trajectory_velocity():
     module = _load_end_effector_module()
+    controller = module.EndEffectorTwistController(link_length=0.7835, vel_factor=2.0, max_xy_speed=0.4)
 
-    class FakePublisher:
-        def __init__(self):
-            self.published = []
+    class _Traj:
+        x = 0.01
+        y = 0.0
+        z = 1.0
+        psi = 0.0
+        theta = 0.0
+        vx = 0.3
+        vy = 0.1
+        vz = 0.0
+        vpsi = 0.0
+        vtheta = 0.0
+        nx = 1.0
+        ny = 0.0
+        nz = 0.0
 
-        def publish(self, message):
-            self.published.append(message)
+    controller.update_trajectory_reference(_Traj())
+    twist = controller.compute_twist()
 
-    fake_publisher = FakePublisher()
-    node = module.EndEffectorKinematicsNode(publisher=fake_publisher)
-
-    state = node.build_and_publish()
-
-    assert len(fake_publisher.published) == 1
-    assert fake_publisher.published[0] == state
+    assert abs(twist.linear.x) <= 0.4
+    assert abs(twist.linear.y) <= 0.4

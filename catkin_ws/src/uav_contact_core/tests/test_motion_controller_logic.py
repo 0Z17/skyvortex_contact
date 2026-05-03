@@ -15,9 +15,9 @@ def fuse_cmd(v_ref, v_normal, n, vmax):
     return v_cmd
 
 
-def fallback_cmd(safety_unsafe, has_vel_ref, has_vel_normal, vel_ref_fresh, vel_normal_fresh):
+def fallback_cmd(safety_unsafe, has_vel_ref, has_vel_normal, vel_ref_fresh, vel_normal_fresh, offboard_ready=True):
     inputs_ready = has_vel_ref and has_vel_normal and vel_ref_fresh and vel_normal_fresh
-    if safety_unsafe or not inputs_ready:
+    if safety_unsafe or (not offboard_ready) or not inputs_ready:
         return [0.0, 0.0, 0.0]
     return [1.0, 1.0, 1.0]
 
@@ -59,21 +59,36 @@ def test_fallback_zero_when_safety_unsafe():
     assert v == [0.0, 0.0, 0.0]
 
 
-def test_fallback_zero_when_required_input_missing_or_stale():
-    missing = fallback_cmd(
-        safety_unsafe=False,
-        has_vel_ref=True,
-        has_vel_normal=False,
-        vel_ref_fresh=True,
-        vel_normal_fresh=False,
-    )
-    stale = fallback_cmd(
+def test_fallback_zero_when_not_offboard_ready():
+    v = fallback_cmd(
         safety_unsafe=False,
         has_vel_ref=True,
         has_vel_normal=True,
-        vel_ref_fresh=False,
+        vel_ref_fresh=True,
         vel_normal_fresh=True,
+        offboard_ready=False,
     )
+    assert v == [0.0, 0.0, 0.0]
 
-    assert missing == [0.0, 0.0, 0.0]
-    assert stale == [0.0, 0.0, 0.0]
+
+def test_cpp_has_offboard_gate_param_and_subscriber():
+    content = _controller_cpp_path().read_text(encoding="utf-8")
+    assert "zero_when_not_offboard_ready" in content
+    assert "\"/mavros/state\"" in content
+    assert "msg->mode == \"OFFBOARD\"" in content
+
+
+def test_cpp_has_tangent_decomposition_for_contact_phases():
+    content = _controller_cpp_path().read_text(encoding="utf-8")
+    assert "TangentialComponent" in content
+    assert "max_tangent_velocity_" in content
+    assert "normal_velocity = std::max(" in content
+    assert "max_normal_velocity_" in content
+
+
+def test_cpp_has_tangential_position_feedback_term():
+    content = _controller_cpp_path().read_text(encoding="utf-8")
+    assert "tangent_position_kp_" in content
+    assert "p_ref_" in content and "p_meas_" in content
+    assert "p_error_tangent" in content
+    assert "\"/mavros/local_position/pose\"" in content
