@@ -31,3 +31,29 @@ def test_constructor_raises_for_non_positive_dt():
 
     with pytest.raises(ValueError, match="dt must be > 0"):
         module.DistPIDController(kp=1.0, ki=0.0, kd=0.0, dt=0.0, v_max=0.2)
+
+
+def test_node_core_publishes_pid_output_with_fake_publisher():
+    module = _load_dist_pid_module()
+
+    class FakePublisher:
+        def __init__(self):
+            self.values = []
+
+        def publish(self, value):
+            self.values.append(value)
+
+    fake_pub = FakePublisher()
+    controller = module.DistPIDController(kp=1.0, ki=0.0, kd=0.0, dt=0.1, v_max=0.25)
+    node_core = module.DistPIDControllerNodeCore(
+        controller=controller,
+        velocity_publisher=fake_pub,
+        target_distance=0.3,
+    )
+
+    node_core.set_phase_enabled(True)
+    node_core.set_distance(0.6)
+    output = node_core.compute_and_publish()
+
+    assert output == pytest.approx(0.25)
+    assert fake_pub.values == [pytest.approx(0.25)]

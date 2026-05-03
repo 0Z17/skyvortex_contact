@@ -19,5 +19,6 @@
     <param name="publish_rate_hz" value="10.0"/>
     <param name="initial_pwm" value="1500"/>
   </node>
+  <node pkg="uav_contact_core" type="dist_pid_controller.py" name="dist_pid_controller" output="screen"/>
   <node pkg="uav_contact_core" type="uav_motion_controller_node" name="uav_motion_controller_node" output="screen"/>
 </launch>
