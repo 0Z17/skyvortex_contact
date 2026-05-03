@@ -1,2 +1,4 @@
 task_manager:
   publish_rate_hz: 10.0
+  auto_start: true
+  initial_phase: APPROACH

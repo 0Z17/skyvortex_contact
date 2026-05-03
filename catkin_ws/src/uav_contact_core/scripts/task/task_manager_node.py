@@ -36,6 +36,16 @@ class TaskManager:
         TaskPhase.PHASE_TRACK,
     }
 
+    PHASE_SEQUENCE = [
+        TaskPhase.PHASE_IDLE,
+        TaskPhase.PHASE_APPROACH,
+        TaskPhase.PHASE_ALIGN,
+        TaskPhase.PHASE_CONTACT,
+        TaskPhase.PHASE_TRACK,
+        TaskPhase.PHASE_RELEASE,
+        TaskPhase.PHASE_ABORT,
+    ]
+
     # Align local state values with TaskPhase message constants.
     IDLE = TaskPhase.PHASE_IDLE
     STABILIZE = TaskPhase.PHASE_ALIGN
@@ -81,6 +91,27 @@ class TaskManagerNode:
         self.phase_enabled_pub = rospy.Publisher("/uav_contact/phase_enabled", Bool, queue_size=10)
         self.manager = TaskManager(phase_publisher=self.phase_pub)
         self.publish_rate_hz = float(rospy.get_param("/task_manager/publish_rate_hz", 10.0))
+
+        auto_start = bool(rospy.get_param("/task_manager/auto_start", True))
+        initial_phase_param = rospy.get_param("/task_manager/initial_phase", TaskPhase.PHASE_APPROACH)
+        if auto_start:
+            self.manager.phase = self._resolve_initial_phase(initial_phase_param)
+
+    def _resolve_initial_phase(self, initial_phase_param):
+        if isinstance(initial_phase_param, int):
+            if 0 <= initial_phase_param < len(TaskManager.PHASE_SEQUENCE):
+                return TaskManager.PHASE_SEQUENCE[initial_phase_param]
+            return TaskPhase.PHASE_APPROACH
+
+        candidate = str(initial_phase_param).strip().upper()
+        if not candidate.startswith("PHASE_"):
+            candidate = f"PHASE_{candidate}"
+
+        resolved = getattr(TaskPhase, candidate, None)
+        if resolved in TaskManager.PHASE_SEQUENCE:
+            return resolved
+
+        return TaskPhase.PHASE_APPROACH
 
     def spin(self):
         rate = rospy.Rate(self.publish_rate_hz)
