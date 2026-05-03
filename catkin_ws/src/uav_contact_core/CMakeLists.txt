@@ -30,5 +30,6 @@ catkin_install_python(PROGRAMS
   scripts/trajectory/trajectory_server_node.py
   scripts/kinematics/end_effector_kinematics_node.py
   scripts/safety/safety_monitor_node.py
+  scripts/actuation/joint_servo_bridge.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

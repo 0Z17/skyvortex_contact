@@ -12,6 +12,12 @@
   <node pkg="uav_contact_core" type="task_manager_node.py" name="task_manager_node" output="screen"/>
   <node pkg="uav_contact_core" type="trajectory_server_node.py" name="trajectory_server" output="screen"/>
   <node pkg="uav_contact_core" type="end_effector_kinematics_node.py" name="end_effector_kinematics" output="screen"/>
-  <node pkg="uav_contact_core" type="safety_monitor_node.py" name="safety_monitor" output="screen"/>
+  <node pkg="uav_contact_core" type="safety_monitor_node.py" name="safety_monitor" output="screen">
+    <remap from="~state" to="/uav_contact/safety/state"/>
+  </node>
+  <node pkg="uav_contact_core" type="joint_servo_bridge.py" name="joint_servo_bridge" output="screen">
+    <param name="publish_rate_hz" value="10.0"/>
+    <param name="initial_pwm" value="1500"/>
+  </node>
   <node pkg="uav_contact_core" type="uav_motion_controller_node" name="uav_motion_controller_node" output="screen"/>
 </launch>

@@ -41,8 +41,21 @@ class JointServoBridge:
 
 
 def main():
-    bridge = JointServoBridge()
-    return bridge
+    try:
+        import rospy
+        from std_msgs.msg import Float64
+    except ImportError as exc:
+        raise RuntimeError("rospy and std_msgs are required to run joint_servo_bridge.py") from exc
+
+    rospy.init_node("joint_servo_bridge", anonymous=False)
+    publish_rate_hz = float(rospy.get_param("~publish_rate_hz", 10.0))
+    initial_pwm = float(rospy.get_param("~initial_pwm", 1500.0))
+    publisher = rospy.Publisher("/servo/command", Float64, queue_size=10)
+
+    rate = rospy.Rate(publish_rate_hz if publish_rate_hz > 0.0 else 10.0)
+    while not rospy.is_shutdown():
+        publisher.publish(Float64(data=initial_pwm))
+        rate.sleep()
 
 
 if __name__ == "__main__":
