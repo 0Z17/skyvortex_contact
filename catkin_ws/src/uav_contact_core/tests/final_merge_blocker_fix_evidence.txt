@@ -1,0 +1,92 @@
+Final merge blocker fix evidence
+Date: 2026-05-03
+Worktree: /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1
+
+1) Build
+Command:
+  cd /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws && catkin_make
+Result:
+  Build succeeded.
+  uav_contact_msgs message generation completed.
+  uav_motion_controller_node built successfully.
+
+2) Targeted tests
+Command:
+  cd /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws && pytest -q \
+    src/uav_contact_core/tests/test_task_manager.py \
+    src/uav_contact_core/tests/test_safety_monitor.py \
+    src/uav_contact_core/tests/test_trajectory_server.py \
+    src/uav_contact_core/tests/test_end_effector_kinematics.py \
+    src/uav_contact_core/tests/test_dist_pid_controller.py \
+    src/uav_contact_core/tests/test_motion_controller_logic.py
+Result:
+  19 passed in 1.06s
+
+3) Launch validation with timeout
+Command:
+  cd /home/wsl/proj/uam_exp/.worktrees/uav-contact-refactor-base-v1/catkin_ws
+  source devel/setup.bash
+  timeout 35s roslaunch uav_contact_bringup experiment.launch
+Result:
+  Launch started all expected nodes and exited by timeout (expected).
+  Nodes include:
+    - task_manager_node
+    - trajectory_server
+    - end_effector_kinematics
+    - safety_monitor
+    - dist_pid_controller
+    - uav_motion_controller_node
+    - baseline_velocity_ref_pub (synthetic bridge)
+    - baseline_surface_normal_pub (synthetic bridge)
+    - baseline_safety_unsafe_pub (synthetic bridge)
+
+4) Topic presence and type compatibility checks
+Commands:
+  rostopic list
+  rostopic info /uav_contact/task_phase
+  rostopic info /uav_contact/safety/state
+  rostopic info /uav_contact/trajectory/reference
+  rostopic info /uav_contact/ee/state
+  rostopic info /uav_contact/phase_enabled
+  rostopic info /uav_contact/distance
+  rostopic info /uav_contact/velocity_normal_cmd
+
+Results:
+  /uav_contact/task_phase
+    Type: uav_contact_msgs/TaskPhase
+    Publisher: /task_manager_node
+
+  /uav_contact/safety/state
+    Type: uav_contact_msgs/SafetyState
+    Publisher: /safety_monitor
+
+  /uav_contact/trajectory/reference
+    Type: uav_contact_msgs/TrajectoryPoint
+    Publisher: /trajectory_server
+
+  /uav_contact/ee/state
+    Type: uav_contact_msgs/EndEffectorState
+    Publisher: /end_effector_kinematics
+
+  /uav_contact/phase_enabled
+    Type: std_msgs/Bool
+    Publisher: /task_manager_node
+    Subscriber: /dist_pid_controller
+
+  /uav_contact/distance
+    Type: std_msgs/Float64
+    Publisher: /end_effector_kinematics
+    Subscriber: /dist_pid_controller
+
+  /uav_contact/velocity_normal_cmd
+    Type: std_msgs/Float64
+    Publisher: /dist_pid_controller
+    Subscriber: /uav_motion_controller_node
+
+5) Wiring notes
+- uav_motion_controller_node topic inputs were remapped in experiment.launch to /uav_contact/* topics.
+- dist_pid_controller input subscriptions are now wired to /uav_contact/phase_enabled and /uav_contact/distance.
+- Minimal synthetic publishers were added only for missing baseline sources needed to activate uav_motion_controller_node inputs:
+  /uav_contact/velocity_ref
+  /uav_contact/surface_normal
+  /uav_contact/safety_unsafe

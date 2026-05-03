@@ -6,10 +6,11 @@ find_package(catkin REQUIRED COMPONENTS
   mavros_msgs
   roscpp
   std_msgs
+  uav_contact_msgs
 )
 
 catkin_package(
-  CATKIN_DEPENDS geometry_msgs mavros_msgs roscpp std_msgs
+  CATKIN_DEPENDS geometry_msgs mavros_msgs roscpp std_msgs uav_contact_msgs
 )
 
 include_directories(

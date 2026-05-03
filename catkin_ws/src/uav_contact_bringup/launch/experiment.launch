@@ -19,6 +19,18 @@
     <param name="publish_rate_hz" value="10.0"/>
     <param name="initial_pwm" value="1500"/>
   </node>
-  <node pkg="uav_contact_core" type="dist_pid_controller.py" name="dist_pid_controller" output="screen"/>
-  <node pkg="uav_contact_core" type="uav_motion_controller_node" name="uav_motion_controller_node" output="screen"/>
+  <node pkg="uav_contact_core" type="dist_pid_controller.py" name="dist_pid_controller" output="screen">
+    <param name="phase_enabled_topic" value="/uav_contact/phase_enabled"/>
+    <param name="distance_topic" value="/uav_contact/distance"/>
+  </node>
+
+  <node pkg="rostopic" type="rostopic" name="baseline_velocity_ref_pub" args="pub -r 10 /uav_contact/velocity_ref geometry_msgs/Vector3 '{x: 0.0, y: 0.0, z: 0.0}'" output="screen"/>
+  <node pkg="rostopic" type="rostopic" name="baseline_surface_normal_pub" args="pub -r 10 /uav_contact/surface_normal geometry_msgs/Vector3 '{x: 1.0, y: 0.0, z: 0.0}'" output="screen"/>
+  <node pkg="rostopic" type="rostopic" name="baseline_safety_unsafe_pub" args="pub -r 10 /uav_contact/safety_unsafe std_msgs/Bool '{data: false}'" output="screen"/>
+  <node pkg="uav_contact_core" type="uav_motion_controller_node" name="uav_motion_controller_node" output="screen">
+    <remap from="velocity_ref" to="/uav_contact/velocity_ref"/>
+    <remap from="velocity_normal_cmd" to="/uav_contact/velocity_normal_cmd"/>
+    <remap from="surface_normal" to="/uav_contact/surface_normal"/>
+    <remap from="safety_unsafe" to="/uav_contact/safety_unsafe"/>
+  </node>
 </launch>

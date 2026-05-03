@@ -23,8 +23,10 @@ def test_state_contains_pose_twist_and_contact_fields():
     assert "orientation" in state
     assert "linear_velocity" in state
     assert "angular_velocity" in state
-    assert "normal_velocity" in state
-    assert "contact_error" in state
+    assert "contact_normal" in state
+    assert "estimated_wrench" in state
+    assert "in_contact" in state
+    assert "distance" in state
 
 
 def test_build_and_publish_emits_state_once_with_fake_publisher():

@@ -31,6 +31,27 @@ def test_load_csv_returns_waypoints():
     ]
 
 
+def test_publish_waypoints_emits_trajectory_point_with_first_waypoint():
+    module = _load_trajectory_module()
+
+    class FakePublisher:
+        def __init__(self):
+            self.messages = []
+
+        def publish(self, message):
+            self.messages.append(message)
+
+    fake_pub = FakePublisher()
+    server = module.TrajectoryServer(publisher=fake_pub)
+    server.publish_waypoints([(1.0, 2.0, 3.0, 0.5)])
+
+    assert len(fake_pub.messages) == 1
+    msg = fake_pub.messages[0]
+    assert msg.pose.position.x == 1.0
+    assert msg.pose.position.y == 2.0
+    assert msg.pose.position.z == 3.0
+
+
 def test_load_csv_missing_file_raises():
     module = _load_trajectory_module()
     server = module.TrajectoryServer()

@@ -89,8 +89,8 @@ class DistPIDControllerNode:
         self.publish_rate_hz = float(rospy.get_param("/contact_controller/publish_rate_hz", 50.0))
 
         velocity_topic = rospy.get_param("/topics/velocity_normal_cmd", "/uav_contact/velocity_normal_cmd")
-        phase_enabled_topic = rospy.get_param("~phase_enabled_topic", "~phase_enabled")
-        distance_topic = rospy.get_param("~distance_topic", "~distance")
+        phase_enabled_topic = rospy.get_param("~phase_enabled_topic", "/uav_contact/phase_enabled")
+        distance_topic = rospy.get_param("~distance_topic", "/uav_contact/distance")
 
         self.velocity_pub = rospy.Publisher(velocity_topic, Float64, queue_size=10)
         self.core = DistPIDControllerNodeCore(

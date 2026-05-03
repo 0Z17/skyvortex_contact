@@ -17,5 +17,6 @@ def _load_safety_module():
 
 def test_roll_limit_triggers_state():
     module = _load_safety_module()
-    state = module.evaluate_safety(roll_deg=20, pitch_deg=0, max_roll=12, max_pitch=12)
-    assert state == "ATTITUDE_LIMIT_EXCEEDED"
+    armed, reason = module.evaluate_safety(roll_deg=20, pitch_deg=0, max_roll=12, max_pitch=12)
+    assert armed is False
+    assert reason == "ATTITUDE_LIMIT_EXCEEDED"

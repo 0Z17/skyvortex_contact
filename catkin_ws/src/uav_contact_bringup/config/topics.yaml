@@ -4,3 +4,6 @@ topics:
   surface_normal: "/uav_contact/surface_normal"
   safety_unsafe: "/uav_contact/safety_unsafe"
   setpoint_raw_local: "/mavros/setpoint_raw/local"
+  task_phase: "/uav_contact/task_phase"
+  phase_enabled: "/uav_contact/phase_enabled"
+  distance: "/uav_contact/distance"

@@ -2,26 +2,50 @@
 
 try:
     import rospy
-    from std_msgs.msg import String
+    from std_msgs.msg import Bool
+    from uav_contact_msgs.msg import TaskPhase
 except ImportError:  # pragma: no cover - allows tests without ROS runtime
     rospy = None
-    String = None
+
+    class Bool:
+        def __init__(self, data=False):
+            self.data = bool(data)
+
+    class TaskPhase:  # minimal fallback for non-ROS test environments
+        PHASE_IDLE = "IDLE"
+        PHASE_APPROACH = "APPROACH"
+        PHASE_ALIGN = "ALIGN"
+        PHASE_CONTACT = "CONTACT"
+        PHASE_TRACK = "TRACK"
+        PHASE_RELEASE = "RELEASE"
+        PHASE_ABORT = "ABORT"
+
+        def __init__(self):
+            self.phase = self.PHASE_IDLE
+            self.progress = 0.0
+            self.active_constraints = []
 
 
 class TaskManager:
     """Minimal Task 4 baseline task manager with explicit phases."""
 
-    # Task 4 local state-machine phase constants for baseline behavior.
-    # Message-level enum integration is intentionally handled in later integration tasks.
-    IDLE = "IDLE"
-    STABILIZE = "STABILIZE"
-    APPROACH = "APPROACH"
-    INITIAL_CONTACT = "INITIAL_CONTACT"
-    SLIDING_CONTACT = "SLIDING_CONTACT"
-    RETREAT = "RETREAT"
-    EMERGENCY_RETREAT = "EMERGENCY_RETREAT"
-    FINISHED = "FINISHED"
-    ERROR = "ERROR"
+    PHASES_ENABLED_FOR_CONTACT_CONTROL = {
+        TaskPhase.PHASE_APPROACH,
+        TaskPhase.PHASE_ALIGN,
+        TaskPhase.PHASE_CONTACT,
+        TaskPhase.PHASE_TRACK,
+    }
+
+    # Align local state values with TaskPhase message constants.
+    IDLE = TaskPhase.PHASE_IDLE
+    STABILIZE = TaskPhase.PHASE_ALIGN
+    APPROACH = TaskPhase.PHASE_APPROACH
+    INITIAL_CONTACT = TaskPhase.PHASE_CONTACT
+    SLIDING_CONTACT = TaskPhase.PHASE_TRACK
+    RETREAT = TaskPhase.PHASE_RELEASE
+    EMERGENCY_RETREAT = TaskPhase.PHASE_ABORT
+    FINISHED = TaskPhase.PHASE_IDLE
+    ERROR = TaskPhase.PHASE_ABORT
 
     def __init__(self, phase_publisher=None):
         self.phase = self.IDLE
@@ -30,7 +54,14 @@ class TaskManager:
     def publish_phase(self):
         if self._phase_publisher is None:
             return
-        self._phase_publisher.publish(self.phase)
+        msg = TaskPhase()
+        msg.phase = self.phase
+        msg.progress = 0.0
+        msg.active_constraints = []
+        self._phase_publisher.publish(msg)
+
+    def is_phase_enabled(self):
+        return self.phase in self.PHASES_ENABLED_FOR_CONTACT_CONTROL
 
     def on_safety_emergency(self):
         if self.phase != self.EMERGENCY_RETREAT:
@@ -46,7 +77,8 @@ class TaskManagerNode:
             raise RuntimeError("rospy is required to run TaskManagerNode")
 
         rospy.init_node("task_manager_node", anonymous=False)
-        self.phase_pub = rospy.Publisher("~task_phase", String, queue_size=10)
+        self.phase_pub = rospy.Publisher("/uav_contact/task_phase", TaskPhase, queue_size=10)
+        self.phase_enabled_pub = rospy.Publisher("/uav_contact/phase_enabled", Bool, queue_size=10)
         self.manager = TaskManager(phase_publisher=self.phase_pub)
         self.publish_rate_hz = float(rospy.get_param("/task_manager/publish_rate_hz", 10.0))
 
@@ -54,6 +86,7 @@ class TaskManagerNode:
         rate = rospy.Rate(self.publish_rate_hz)
         while not rospy.is_shutdown():
             self.manager.publish_phase()
+            self.phase_enabled_pub.publish(Bool(data=self.manager.is_phase_enabled()))
             rate.sleep()
 
 

@@ -5,8 +5,8 @@
 
 def evaluate_safety(roll_deg, pitch_deg, max_roll, max_pitch):
     if abs(roll_deg) > max_roll or abs(pitch_deg) > max_pitch:
-        return "ATTITUDE_LIMIT_EXCEEDED"
-    return "NORMAL"
+        return False, "ATTITUDE_LIMIT_EXCEEDED"
+    return True, "NORMAL"
 
 
 class SafetyMonitorNode:
@@ -16,37 +16,45 @@ class SafetyMonitorNode:
         self.max_pitch = max_pitch
 
     def evaluate_and_publish(self, roll_deg, pitch_deg):
-        state = evaluate_safety(roll_deg, pitch_deg, self.max_roll, self.max_pitch)
+        armed, reason = evaluate_safety(roll_deg, pitch_deg, self.max_roll, self.max_pitch)
         if self.publisher is not None:
-            self.publisher.publish(state)
-        return state
+            self.publisher.publish(armed, reason)
+        return armed, reason
 
 
 def main():
     try:
         import rospy
         from geometry_msgs.msg import Vector3
-        from std_msgs.msg import String
+        from uav_contact_msgs.msg import SafetyState
     except ImportError as exc:
         raise RuntimeError(
-            "rospy, geometry_msgs, and std_msgs are required to run safety_monitor_node.py"
+            "rospy, geometry_msgs, and uav_contact_msgs are required to run safety_monitor_node.py"
         ) from exc
 
-    class _StringPublisherAdapter:
+    class _SafetyPublisherAdapter:
         def __init__(self, ros_publisher):
             self._ros_publisher = ros_publisher
 
-        def publish(self, state):
-            self._ros_publisher.publish(String(data=state))
+        def publish(self, armed, reason):
+            msg = SafetyState()
+            msg.header.stamp = rospy.Time.now()
+            msg.armed = bool(armed)
+            msg.e_stop = not bool(armed)
+            msg.watchdog_ok = True
+            msg.geofence_ok = True
+            msg.contact_force_ok = True
+            msg.reason = reason
+            self._ros_publisher.publish(msg)
 
     rospy.init_node("safety_monitor", anonymous=False)
     rospy.loginfo("Safety monitor baseline node started")
 
     max_roll = rospy.get_param("~max_roll_deg", 12.0)
     max_pitch = rospy.get_param("~max_pitch_deg", 12.0)
-    state_publisher = rospy.Publisher("~state", String, queue_size=10)
+    state_publisher = rospy.Publisher("~state", SafetyState, queue_size=10)
     node = SafetyMonitorNode(
-        publisher=_StringPublisherAdapter(state_publisher),
+        publisher=_SafetyPublisherAdapter(state_publisher),
         max_roll=max_roll,
         max_pitch=max_pitch,
     )
