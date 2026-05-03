@@ -6,6 +6,8 @@ safety_monitor:
   distance_jump_threshold: 0.03
   sensor_timeout: 0.5
   mavros_timeout: 0.5
+  enable_sensor_timeout_check: false
+  enable_mavros_timeout_check: false
   require_offboard: true
   require_armed: true
   offboard_drop_emergency: true

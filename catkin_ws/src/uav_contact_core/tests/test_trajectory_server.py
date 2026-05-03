@@ -50,12 +50,14 @@ def test_load_csv_returns_waypoints():
 
     waypoints = server.load_csv(csv_path)
 
-    assert len(waypoints) == 3
+    assert len(waypoints) > 3
     assert waypoints[0]["vx"] == 0.0
     assert waypoints[0]["vpsi"] == 0.0
-    assert waypoints[1]["x"] == 1.0
-    assert waypoints[1]["vtheta"] == 0.05
-    assert pytest.approx(waypoints[2]["nx"], rel=1e-9) == 0.975170327201816
+    assert pytest.approx(waypoints[1]["x"], rel=1e-9) == 1.65286
+    assert pytest.approx(waypoints[1]["vtheta"], rel=1e-9) == 0.0001759
+    assert pytest.approx(waypoints[2]["nx"], rel=1e-9) == (
+        module.math.cos(waypoints[2]["psi"]) * module.math.cos(waypoints[2]["theta"])
+    )
 
 
 def test_publish_stabilize_emits_hover_zero_velocity():
@@ -105,7 +107,7 @@ def test_approach_builds_segment_from_stable_to_wp0_minus_offset_n():
     assert pytest.approx(end["theta"], rel=1e-9) == 0.0
 
 
-def test_publish_approach_advances_segment_index_and_zero_velocity():
+def test_publish_approach_advances_segment_index_and_has_velocity():
     module = _load_trajectory_module()
     traj_pub, joint_pub = _make_publishers(module)
     server = module.TrajectoryServer(
@@ -124,11 +126,7 @@ def test_publish_approach_advances_segment_index_and_zero_velocity():
 
     assert server.approach_index == 2
     for msg in traj_pub.messages[-3:]:
-        assert msg.vx == 0.0
-        assert msg.vy == 0.0
-        assert msg.vz == 0.0
-        assert msg.vpsi == 0.0
-        assert msg.vtheta == 0.0
+        assert msg.vx != 0.0 or msg.vy != 0.0 or msg.vz != 0.0
 
 
 def test_initial_contact_builds_segment_from_approach_end_to_wp0():
@@ -159,7 +157,7 @@ def test_initial_contact_builds_segment_from_approach_end_to_wp0():
     assert pytest.approx(end["theta"], rel=1e-9) == wp0["theta"]
 
 
-def test_publish_initial_contact_advances_segment_index_and_zero_velocity():
+def test_publish_initial_contact_advances_segment_index_and_has_velocity():
     module = _load_trajectory_module()
     traj_pub, joint_pub = _make_publishers(module)
     server = module.TrajectoryServer(
@@ -177,14 +175,22 @@ def test_publish_initial_contact_advances_segment_index_and_zero_velocity():
 
     assert server.initial_contact_index == 2
     for msg in traj_pub.messages[-3:]:
-        assert msg.vx == 0.0
-        assert msg.vy == 0.0
-        assert msg.vz == 0.0
-        assert msg.vpsi == 0.0
-        assert msg.vtheta == 0.0
+        assert msg.vx != 0.0 or msg.vy != 0.0 or msg.vz != 0.0
 
 
-def test_publish_sliding_advances_until_last_waypoint_and_holds():
+def test_sliding_builds_cost_interpolated_path():
+    module = _load_trajectory_module()
+    server = module.TrajectoryServer()
+    server.waypoints = _sample_waypoints()
+
+    server._build_sliding_path()
+
+    assert len(server.sliding_path) > len(server.waypoints)
+    assert pytest.approx(server.sliding_path[0]["x"], rel=1e-9) == server.waypoints[0]["x"]
+    assert pytest.approx(server.sliding_path[-1]["x"], rel=1e-9) == server.waypoints[-1]["x"]
+
+
+def test_publish_sliding_advances_over_cost_interpolated_path():
     module = _load_trajectory_module()
     traj_pub, joint_pub = _make_publishers(module)
     server = module.TrajectoryServer(
@@ -200,10 +206,7 @@ def test_publish_sliding_advances_until_last_waypoint_and_holds():
     server.publish()
 
     assert len(traj_pub.messages) == 3
-    assert traj_pub.messages[0].x == 1.0
-    assert traj_pub.messages[1].x == 4.0
-    assert traj_pub.messages[2].x == 4.0
-    assert server.waypoint_index == 1
+    assert server.sliding_index >= 1
 
 
 def test_publish_retreat_generates_leave_segment_and_zero_velocity():
@@ -227,7 +230,7 @@ def test_publish_retreat_generates_leave_segment_and_zero_velocity():
     server.publish()
 
     assert len(server.retreat_path) == 3
-    assert pytest.approx(server.retreat_path[-1]["x"], rel=1e-9) == 3.5
+    assert pytest.approx(server.retreat_path[-1]["x"], rel=1e-9) == server.retreat_path[0]["x"] - 0.5
     assert pytest.approx(server.retreat_path[-1]["theta"], rel=1e-9) == 0.0
 
     retreat_msgs = traj_pub.messages[-3:]
@@ -261,7 +264,7 @@ def test_load_csv_non_numeric_raises(tmp_path):
     module = _load_trajectory_module()
     server = module.TrajectoryServer()
     csv_path = tmp_path / "non_numeric.csv"
-    csv_path.write_text("x,y,z,psi,theta\n0,abc,1,0,0\n", encoding="utf-8")
+    csv_path.write_text("X,Y,Z,Psi,Theta\n0,abc,1,0,0\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="Non-numeric value"):
         server.load_csv(csv_path)

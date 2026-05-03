@@ -4,6 +4,8 @@ import csv
 import math
 from pathlib import Path
 
+import numpy as np
+
 try:
     import rospy
     from std_msgs.msg import Float64
@@ -62,7 +64,7 @@ class TrajectoryServer:
         self,
         trajectory_publisher=None,
         joint_publisher=None,
-        publish_rate_hz=20.0,
+        publish_rate_hz=50.0,
         leave_time_sec=20.0,
         approach_offset_m=0.3,
         approach_time_sec=30.0,
@@ -89,9 +91,10 @@ class TrajectoryServer:
         self.initial_contact_index = 0
         self.initial_contact_active = False
 
-        self.retreat_path = []
-        self.retreat_index = 0
-        self.retreat_active = False
+        self.cost_res = 0.0005
+        self.sliding_path = []
+        self.sliding_index = 0
+        self.sliding_active = False
 
     def load_csv(self, csv_path):
         path = Path(csv_path)
@@ -101,7 +104,7 @@ class TrajectoryServer:
         waypoints = []
         with path.open("r", newline="") as csv_file:
             reader = csv.DictReader(csv_file)
-            required_columns = {"x", "y", "z", "psi", "theta"}
+            required_columns = {"X", "Y", "Z", "Psi", "Theta"}
             fieldnames = set(reader.fieldnames or [])
             missing_columns = sorted(required_columns - fieldnames)
             if missing_columns:
@@ -113,11 +116,11 @@ class TrajectoryServer:
             for row_index, row in enumerate(reader, start=2):
                 try:
                     waypoint = {
-                        "x": float(row["x"]),
-                        "y": float(row["y"]),
-                        "z": float(row["z"]),
-                        "psi": float(row["psi"]),
-                        "theta": float(row["theta"]),
+                        "x": float(row["X"]),
+                        "y": float(row["Y"]),
+                        "z": float(row["Z"]),
+                        "psi": float(row["Psi"]),
+                        "theta": float(row["Theta"]),
                     }
                 except (TypeError, ValueError) as exc:
                     raise ValueError(
@@ -178,21 +181,77 @@ class TrajectoryServer:
 
     def _build_segment(self, start_wp, end_wp, duration_sec):
         num = max(2, int(float(duration_sec) * self.publish_rate_hz))
+        step_x = (float(end_wp["x"]) - float(start_wp["x"])) / float(num)
+        step_y = (float(end_wp["y"]) - float(start_wp["y"])) / float(num)
+        step_z = (float(end_wp["z"]) - float(start_wp["z"])) / float(num)
+        step_psi = (float(end_wp["psi"]) - float(start_wp["psi"])) / float(num)
+        step_theta = (float(end_wp["theta"]) - float(start_wp["theta"])) / float(num)
         segment = []
         for idx in range(num):
             alpha = idx / float(num - 1)
             psi = (1.0 - alpha) * float(start_wp["psi"]) + alpha * float(end_wp["psi"])
             theta = (1.0 - alpha) * float(start_wp["theta"]) + alpha * float(end_wp["theta"])
-            segment.append(
-                self._make_waypoint(
-                    x=(1.0 - alpha) * float(start_wp["x"]) + alpha * float(end_wp["x"]),
-                    y=(1.0 - alpha) * float(start_wp["y"]) + alpha * float(end_wp["y"]),
-                    z=(1.0 - alpha) * float(start_wp["z"]) + alpha * float(end_wp["z"]),
-                    psi=psi,
-                    theta=theta,
-                )
+            wp = self._make_waypoint(
+                x=(1.0 - alpha) * float(start_wp["x"]) + alpha * float(end_wp["x"]),
+                y=(1.0 - alpha) * float(start_wp["y"]) + alpha * float(end_wp["y"]),
+                z=(1.0 - alpha) * float(start_wp["z"]) + alpha * float(end_wp["z"]),
+                psi=psi,
+                theta=theta,
             )
+            wp["vx"] = step_x
+            wp["vy"] = step_y
+            wp["vz"] = step_z
+            wp["vpsi"] = step_psi
+            wp["vtheta"] = step_theta
+            segment.append(wp)
         return segment
+
+    def _segment_cost(self, start_wp, end_wp):
+        weights = np.array([1.0, 1.0, 1.0, 1.0, 3.0], dtype=float)
+        start = np.array([
+            float(start_wp["x"]),
+            float(start_wp["y"]),
+            float(start_wp["z"]),
+            float(start_wp["psi"]),
+            float(start_wp["theta"]),
+        ], dtype=float)
+        end = np.array([
+            float(end_wp["x"]),
+            float(end_wp["y"]),
+            float(end_wp["z"]),
+            float(end_wp["psi"]),
+            float(end_wp["theta"]),
+        ], dtype=float)
+        return float(np.linalg.norm(weights * (end - start)))
+
+    def _build_sliding_path(self):
+        if len(self.waypoints) < 2:
+            self.sliding_path = list(self.waypoints)
+            self.sliding_index = 0
+            self.sliding_active = bool(self.sliding_path)
+            return
+
+        sliding_path = []
+        for idx in range(1, len(self.waypoints)):
+            start_wp = self.waypoints[idx - 1]
+            end_wp = self.waypoints[idx]
+            cost = self._segment_cost(start_wp, end_wp)
+            num = max(2, int(math.ceil(cost / self.cost_res)))
+            interpolate = np.linspace(
+                np.array([start_wp["x"], start_wp["y"], start_wp["z"], start_wp["psi"], start_wp["theta"]], dtype=float),
+                np.array([end_wp["x"], end_wp["y"], end_wp["z"], end_wp["psi"], end_wp["theta"]], dtype=float),
+                num=num,
+            )
+            for row in interpolate[:-1]:
+                wp = self._make_waypoint(row[0], row[1], row[2], row[3], row[4])
+                sliding_path.append(wp)
+        sliding_path.append(self._make_waypoint(
+            self.waypoints[-1]["x"], self.waypoints[-1]["y"], self.waypoints[-1]["z"],
+            self.waypoints[-1]["psi"], self.waypoints[-1]["theta"]
+        ))
+        self.sliding_path = sliding_path
+        self.sliding_index = 0
+        self.sliding_active = bool(sliding_path)
 
     def _build_approach_path(self):
         if not self.waypoints:
@@ -299,7 +358,7 @@ class TrajectoryServer:
         if self.phase == TaskPhase.INITIAL_CONTACT and prev_phase != TaskPhase.INITIAL_CONTACT:
             self._build_initial_contact_path()
         if self.phase == TaskPhase.SLIDING_CONTACT and prev_phase != TaskPhase.SLIDING_CONTACT:
-            self.waypoint_index = 0
+            self._build_sliding_path()
         if self.phase == TaskPhase.RETREAT and prev_phase != TaskPhase.RETREAT:
             self._build_retreat_path()
         self._prev_phase = prev_phase
@@ -399,7 +458,7 @@ class TrajectoryServer:
         if self.phase == TaskPhase.APPROACH:
             if self.approach_active and self.approach_index < len(self.approach_path):
                 wp = self.approach_path[self.approach_index]
-                self._publish_waypoint(wp, zero_velocity=True)
+                self._publish_waypoint(wp)
                 if self.approach_index < len(self.approach_path) - 1:
                     self.approach_index += 1
                 return
@@ -409,7 +468,7 @@ class TrajectoryServer:
         if self.phase == TaskPhase.INITIAL_CONTACT:
             if self.initial_contact_active and self.initial_contact_index < len(self.initial_contact_path):
                 wp = self.initial_contact_path[self.initial_contact_index]
-                self._publish_waypoint(wp, zero_velocity=True)
+                self._publish_waypoint(wp)
                 if self.initial_contact_index < len(self.initial_contact_path) - 1:
                     self.initial_contact_index += 1
                 return
@@ -417,9 +476,13 @@ class TrajectoryServer:
             return
 
         if self.phase == TaskPhase.SLIDING_CONTACT:
-            wp = self.waypoints[min(self.waypoint_index, len(self.waypoints) - 1)]
-            self._publish_waypoint(wp)
-            self._advance_waypoint()
+            if self.sliding_active and self.sliding_index < len(self.sliding_path):
+                wp = self.sliding_path[self.sliding_index]
+                self._publish_waypoint(wp)
+                if self.sliding_index < len(self.sliding_path) - 1:
+                    self.sliding_index += 1
+                return
+            self._publish_hover()
             return
 
         if self.phase == TaskPhase.RETREAT:
@@ -437,7 +500,7 @@ def main():
     rospy.init_node("trajectory_server", anonymous=False)
 
     path_csv = rospy.get_param("/trajectory_server/path_csv", "")
-    publish_rate_hz = float(rospy.get_param("/trajectory_server/publish_rate_hz", 20.0))
+    publish_rate_hz = float(rospy.get_param("/trajectory_server/publish_rate_hz", 50.0))
     leave_time_sec = float(rospy.get_param("/trajectory_server/leave_time_sec", 20.0))
     approach_offset_m = float(rospy.get_param("/trajectory_server/approach_offset_m", 0.3))
     approach_time_sec = float(rospy.get_param("/trajectory_server/approach_time_sec", 30.0))

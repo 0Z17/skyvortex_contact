@@ -118,7 +118,7 @@ def main():
 
     rospy.init_node("end_effector_kinematics", anonymous=False)
 
-    publish_rate_hz = float(rospy.get_param("~publish_rate_hz", 30.0))
+    publish_rate_hz = float(rospy.get_param("~publish_rate_hz", 50.0))
     controller = EndEffectorTwistController(
         link_length=float(rospy.get_param("~link_length", 0.7835)),
         vel_factor=float(rospy.get_param("~vel_factor", 2.0)),

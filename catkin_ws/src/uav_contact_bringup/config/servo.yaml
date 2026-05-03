@@ -4,10 +4,10 @@ joint_servo_bridge:
   joint_max: 1.57
   neutral_theta: 0.0
   enable_in_phases:
-    - 2
-    - 3
-    - 4
-    - 5
+    - 2  # APPROACH
+    - 3  # INITIAL_CONTACT
+    - 4  # SLIDING_CONTACT
+    - 5  # RETREAT
   use_dynamixel: true
   servo_joint_offset: 0.0
   servo_operating_mode: 4

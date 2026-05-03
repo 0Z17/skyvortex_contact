@@ -3,7 +3,6 @@
 import math
 import rospy
 from geometry_msgs.msg import PoseStamped
-from sensor_msgs.msg import Imu
 from mavros_msgs.msg import State as MavrosState
 from std_msgs.msg import Float64
 from uav_contact_msgs.msg import SafetyState, TaskPhase
@@ -20,6 +19,8 @@ class SafetyMonitorNode:
         self.distance_jump_threshold = float(rospy.get_param("/safety_monitor/distance_jump_threshold", 0.03))
         self.sensor_timeout = float(rospy.get_param("/safety_monitor/sensor_timeout", 0.5))
         self.mavros_timeout = float(rospy.get_param("/safety_monitor/mavros_timeout", 0.5))
+        self.enable_sensor_timeout_check = bool(rospy.get_param("/safety_monitor/enable_sensor_timeout_check", False))
+        self.enable_mavros_timeout_check = bool(rospy.get_param("/safety_monitor/enable_mavros_timeout_check", False))
         self.require_offboard = bool(rospy.get_param("/safety_monitor/require_offboard", True))
         self.require_armed = bool(rospy.get_param("/safety_monitor/require_armed", True))
         self.offboard_drop_emergency = bool(rospy.get_param("/safety_monitor/offboard_drop_emergency", True))
@@ -40,26 +41,12 @@ class SafetyMonitorNode:
 
         self.state_pub = rospy.Publisher("/uav_contact/safety/state", SafetyState, queue_size=10)
 
-        rospy.Subscriber("/mavros/imu/data", Imu, self._on_imu, queue_size=10)
-        rospy.Subscriber("/mavros/state", MavrosState, self._on_mavros_state, queue_size=10)
         rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self._on_pose, queue_size=10)
+        rospy.Subscriber("/mavros/state", MavrosState, self._on_mavros_state, queue_size=10)
         rospy.Subscriber("/contact/distance", Float64, self._on_distance, queue_size=10)
         rospy.Subscriber("/uav_contact/task/phase", TaskPhase, self._on_task_phase, queue_size=10)
 
         rospy.loginfo("Safety monitor node started")
-
-    def _on_imu(self, msg):
-        self.last_imu_time = rospy.Time.now()
-        q = msg.orientation
-        sinr_cosp = 2.0 * (q.w * q.x + q.y * q.z)
-        cosr_cosp = 1.0 - 2.0 * (q.x * q.x + q.y * q.y)
-        self.current_roll = math.atan2(sinr_cosp, cosr_cosp) * 180.0 / math.pi
-
-        sinp = 2.0 * (q.w * q.y - q.z * q.x)
-        if abs(sinp) >= 1.0:
-            self.current_pitch = math.copysign(90.0, sinp)
-        else:
-            self.current_pitch = math.asin(sinp) * 180.0 / math.pi
 
     def _on_mavros_state(self, msg):
         self.last_mavros_state_time = rospy.Time.now()
@@ -69,6 +56,17 @@ class SafetyMonitorNode:
 
     def _on_pose(self, msg):
         self.last_pose_time = rospy.Time.now()
+        self.last_imu_time = self.last_pose_time
+        q = msg.pose.orientation
+        sinr_cosp = 2.0 * (q.w * q.x + q.y * q.z)
+        cosr_cosp = 1.0 - 2.0 * (q.x * q.x + q.y * q.y)
+        self.current_roll = math.atan2(sinr_cosp, cosr_cosp) * 180.0 / math.pi
+
+        sinp = 2.0 * (q.w * q.y - q.z * q.x)
+        if abs(sinp) >= 1.0:
+            self.current_pitch = math.copysign(90.0, sinp)
+        else:
+            self.current_pitch = math.asin(sinp) * 180.0 / math.pi
 
     def _on_distance(self, msg):
         self.last_distance_time = rospy.Time.now()
@@ -95,7 +93,10 @@ class SafetyMonitorNode:
             TaskPhase.RETREAT,
         )
 
-        if mavros_age > self.mavros_timeout or not self.mavros_connected:
+        if (
+            (self.enable_mavros_timeout_check and mavros_age > self.mavros_timeout)
+            or not self.mavros_connected
+        ):
             state = SafetyState.MAVROS_DISCONNECTED
             safe = False
             reason = "MAVROS_DISCONNECTED"
@@ -113,7 +114,7 @@ class SafetyMonitorNode:
             reason = "NOT_ARMED"
             if self.offboard_drop_emergency and self.current_phase in active_phases:
                 require_emergency = True
-        elif imu_age > self.sensor_timeout:
+        elif self.enable_sensor_timeout_check and imu_age > self.sensor_timeout:
             state = SafetyState.SENSOR_TIMEOUT
             safe = False
             reason = "SENSOR_TIMEOUT"

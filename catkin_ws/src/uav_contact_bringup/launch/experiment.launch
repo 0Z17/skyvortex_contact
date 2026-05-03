@@ -27,5 +27,6 @@
     <node pkg="uav_contact_core" type="end_effector_kinematics_node.py" name="end_effector_kinematics" output="screen"/>
     <node pkg="uav_contact_core" type="joint_servo_bridge.py" name="joint_servo_bridge" output="screen"/>
     <node pkg="uav_contact_core" type="safety_monitor_node.py" name="safety_monitor" output="screen"/>
+    <node pkg="uav_contact_core" type="experiment_data_recorder_node.py" name="experiment_data_recorder" output="screen"/>
   </group>
 </launch>

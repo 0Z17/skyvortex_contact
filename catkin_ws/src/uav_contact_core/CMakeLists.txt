@@ -33,5 +33,6 @@ catkin_install_python(PROGRAMS
   scripts/safety/safety_monitor_node.py
   scripts/actuation/joint_servo_bridge.py
   scripts/control/dist_pid_controller.py
+  scripts/control/experiment_data_recorder_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
