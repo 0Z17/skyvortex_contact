@@ -107,6 +107,48 @@ def test_approach_builds_segment_from_stable_to_wp0_minus_offset_n():
     assert pytest.approx(end["theta"], rel=1e-9) == 0.0
 
 
+def test_approach_uses_stabilize_local_pose_as_start_waypoint():
+    module = _load_trajectory_module()
+    traj_pub, joint_pub = _make_publishers(module)
+    server = module.TrajectoryServer(
+        trajectory_publisher=traj_pub,
+        joint_publisher=joint_pub,
+        publish_rate_hz=10.0,
+        approach_offset_m=0.3,
+        approach_time_sec=0.3,
+    )
+    server.waypoints = _sample_waypoints()
+    server.phase = module.TaskPhase.STABILIZE
+    server.update_local_pose(x=9.0, y=8.0, z=7.0, psi=0.4, theta=0.0)
+
+    server.set_phase(module.TaskPhase.APPROACH)
+
+    start = server.approach_path[0]
+    assert pytest.approx(start["x"], rel=1e-9) == 9.0
+    assert pytest.approx(start["y"], rel=1e-9) == 8.0
+    assert pytest.approx(start["z"], rel=1e-9) == 7.0
+
+
+def test_approach_keeps_configured_duration_even_if_distance_is_large():
+    module = _load_trajectory_module()
+    traj_pub, joint_pub = _make_publishers(module)
+    server = module.TrajectoryServer(
+        trajectory_publisher=traj_pub,
+        joint_publisher=joint_pub,
+        publish_rate_hz=10.0,
+        approach_offset_m=0.3,
+        approach_time_sec=0.3,
+    )
+    server.min_approach_speed_mps = 0.1
+    server.waypoints = _sample_waypoints()
+    server.phase = module.TaskPhase.STABILIZE
+    server.update_local_pose(x=-20.0, y=-20.0, z=-20.0, psi=0.4, theta=0.0)
+
+    server.set_phase(module.TaskPhase.APPROACH)
+
+    assert len(server.approach_path) == int(server.approach_time_sec * server.publish_rate_hz)
+
+
 def test_publish_approach_advances_segment_index_and_has_velocity():
     module = _load_trajectory_module()
     traj_pub, joint_pub = _make_publishers(module)

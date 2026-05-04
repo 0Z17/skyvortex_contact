@@ -8,7 +8,8 @@ import numpy as np
 
 try:
     import rospy
-    from std_msgs.msg import Float64
+    from geometry_msgs.msg import PoseStamped
+    from std_msgs.msg import Bool, Float64
     from uav_contact_msgs.msg import TaskPhase, TrajectoryPoint
 except ImportError:  # pragma: no cover
     class _Obj:
@@ -21,6 +22,8 @@ except ImportError:  # pragma: no cover
 
     rospy = _Obj()
     rospy.Time = _FakeTime
+    rospy.loginfo = lambda *args, **kwargs: None
+    rospy.logwarn = lambda *args, **kwargs: None
 
     class Float64:
         def __init__(self, data=0.0):
@@ -72,16 +75,19 @@ class TrajectoryServer:
     ):
         self.trajectory_publisher = trajectory_publisher
         self.joint_publisher = joint_publisher
+        self.sliding_done_publisher = None
         self.publish_rate_hz = float(publish_rate_hz)
         self.leave_time_sec = float(leave_time_sec)
         self.approach_offset_m = float(approach_offset_m)
         self.approach_time_sec = float(approach_time_sec)
         self.initial_contact_time_sec = float(initial_contact_time_sec)
+        self.min_approach_speed_mps = 0.15
         self.waypoints = []
         self.waypoint_index = 0
         self.phase = TaskPhase.IDLE
         self._prev_phase = TaskPhase.IDLE
         self._last_waypoint = None
+        self._stabilize_start_waypoint = None
 
         self.approach_path = []
         self.approach_index = 0
@@ -95,6 +101,7 @@ class TrajectoryServer:
         self.sliding_path = []
         self.sliding_index = 0
         self.sliding_active = False
+        self._last_sliding_log_time = None
 
     def load_csv(self, csv_path):
         path = Path(csv_path)
@@ -171,6 +178,19 @@ class TrajectoryServer:
         }
         wp["nx"], wp["ny"], wp["nz"] = self._normal_from_angles(wp["psi"], wp["theta"])
         return wp
+
+    def update_local_pose(self, x, y, z, psi=None, theta=0.0):
+        if psi is None:
+            if self._last_waypoint is not None:
+                psi = float(self._last_waypoint["psi"])
+            elif self.waypoints:
+                psi = float(self.waypoints[0]["psi"])
+            else:
+                psi = 0.0
+        wp = self._make_waypoint(x=float(x), y=float(y), z=float(z), psi=float(psi), theta=float(theta))
+        self._stabilize_start_waypoint = wp
+        if self.phase == TaskPhase.STABILIZE:
+            self._last_waypoint = wp
 
     @staticmethod
     def _normalized(vx, vy, vz):
@@ -266,6 +286,25 @@ class TrajectoryServer:
         self.sliding_index = 0
         self.sliding_active = bool(sliding_path)
 
+    def _log_sliding_progress(self):
+        if not self.sliding_path:
+            return
+        now = rospy.Time.now()
+        if self._last_sliding_log_time is not None:
+            delta = now - self._last_sliding_log_time
+            elapsed_sec = delta.to_sec() if hasattr(delta, "to_sec") else float(delta)
+            if elapsed_sec < 1.0:
+                return
+        total = len(self.sliding_path)
+        current = min(self.sliding_index + 1, total)
+        ratio = (100.0 * current / float(total)) if total > 0 else 100.0
+        rospy.loginfo(
+            "SLIDING progress: %d/%d (%.1f%%)",
+            current,
+            total,
+            ratio,
+        )
+        self._last_sliding_log_time = now
     def _build_approach_path(self):
         if not self.waypoints:
             self.approach_path = []
@@ -276,7 +315,9 @@ class TrajectoryServer:
         wp0 = self.waypoints[0]
         nx, ny, nz = self._normalized(float(wp0["nx"]), float(wp0["ny"]), float(wp0["nz"]))
 
-        if self._last_waypoint is not None:
+        if self._stabilize_start_waypoint is not None:
+            stable_wp = self._stabilize_start_waypoint
+        elif self._last_waypoint is not None:
             stable_wp = self._last_waypoint
         else:
             stable_wp = self._make_waypoint(0.0, 0.0, 0.0, float(wp0["psi"]), 0.0)
@@ -288,6 +329,20 @@ class TrajectoryServer:
             psi=float(wp0["psi"]),
             theta=0.0,
         )
+
+        approach_distance = math.sqrt(
+            (float(approach_end["x"]) - float(stable_wp["x"])) ** 2
+            + (float(approach_end["y"]) - float(stable_wp["y"])) ** 2
+            + (float(approach_end["z"]) - float(stable_wp["z"])) ** 2
+        )
+        required_duration = approach_distance / max(self.min_approach_speed_mps, 1e-6)
+        if required_duration > self.approach_time_sec + 1e-6:
+            rospy.logwarn(
+                "APPROACH time may be insufficient: configured=%.2fs required>=%.2fs distance=%.3fm",
+                self.approach_time_sec,
+                required_duration,
+                approach_distance,
+            )
 
         self.approach_path = self._build_segment(
             start_wp=stable_wp,
@@ -372,6 +427,7 @@ class TrajectoryServer:
             self._build_initial_contact_path()
         if self.phase == TaskPhase.SLIDING_CONTACT and prev_phase != TaskPhase.SLIDING_CONTACT:
             self._build_sliding_path()
+            self._last_sliding_log_time = None
         if self.phase == TaskPhase.RETREAT and prev_phase != TaskPhase.RETREAT:
             self._build_retreat_path()
         self._prev_phase = prev_phase
@@ -490,11 +546,14 @@ class TrajectoryServer:
 
         if self.phase == TaskPhase.SLIDING_CONTACT:
             if self.sliding_active and self.sliding_index < len(self.sliding_path):
+                self._log_sliding_progress()
                 wp = self.sliding_path[self.sliding_index]
                 self._publish_waypoint(wp)
                 if self.sliding_index < len(self.sliding_path) - 1:
                     self.sliding_index += 1
                 return
+            if self.sliding_done_publisher is not None:
+                self.sliding_done_publisher.publish(Bool(data=True))
             self._publish_hover()
             return
 
@@ -532,6 +591,10 @@ def main():
         "/uav_contact/joint/reference", Float64, queue_size=10
     )
 
+    sliding_done_publisher = rospy.Publisher(
+        "/uav_contact/task/sliding_done", Bool, queue_size=1, latch=True
+    )
+
     server = TrajectoryServer(
         trajectory_publisher=trajectory_publisher,
         joint_publisher=joint_publisher,
@@ -541,6 +604,7 @@ def main():
         approach_time_sec=approach_time_sec,
         initial_contact_time_sec=initial_contact_time_sec,
     )
+    server.sliding_done_publisher = sliding_done_publisher
 
     try:
         waypoints = server.load_csv(resolved_csv_path)
@@ -552,7 +616,15 @@ def main():
     def _on_task_phase(msg):
         server.set_phase(msg.phase)
 
+    def _on_local_pose(msg):
+        server.update_local_pose(
+            x=msg.pose.position.x,
+            y=msg.pose.position.y,
+            z=msg.pose.position.z,
+        )
+
     rospy.Subscriber("/uav_contact/task/phase", TaskPhase, _on_task_phase, queue_size=10)
+    rospy.Subscriber("/mavros/local_position/pose", PoseStamped, _on_local_pose, queue_size=10)
 
     rate = rospy.Rate(publish_rate_hz)
     rospy.loginfo("Trajectory server started at {} Hz".format(publish_rate_hz))

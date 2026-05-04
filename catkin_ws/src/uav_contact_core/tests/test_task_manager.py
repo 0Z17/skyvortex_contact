@@ -70,7 +70,12 @@ def _load_task_manager_module(params=None, now_sec=10.0):
             self.require_emergency_retreat = require_emergency_retreat
             self.reason = reason
 
+    class _BoolMsg:
+        def __init__(self, data=False):
+            self.data = bool(data)
+
     sys.modules["rospy"] = rospy_stub
+    sys.modules["std_msgs.msg"] = types.SimpleNamespace(Bool=_BoolMsg)
     sys.modules["uav_contact_msgs.msg"] = types.SimpleNamespace(
         TaskPhase=_TaskPhaseMsg,
         SafetyState=_SafetyStateMsg,
@@ -144,6 +149,17 @@ def test_transition_to_approach_requires_offboard_ready():
     node._update_phase()
 
     assert node.phase == module.TaskPhase.APPROACH
+
+
+def test_sliding_done_transitions_to_retreat():
+    module = _load_task_manager_module()
+    node = module.TaskManagerNode()
+    node.phase = module.TaskPhase.SLIDING_CONTACT
+
+    node._on_sliding_done(module.Bool(data=True))
+    node._update_phase()
+
+    assert node.phase == module.TaskPhase.RETREAT
 
 
 def test_emergency_request_forces_emergency_retreat():

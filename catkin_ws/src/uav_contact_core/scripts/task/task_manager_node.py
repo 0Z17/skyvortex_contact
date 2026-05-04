@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
+from std_msgs.msg import Bool
 from uav_contact_msgs.msg import TaskPhase, SafetyState
 
 
@@ -25,6 +26,8 @@ class TaskManagerNode:
 
         self.phase_pub = rospy.Publisher("/uav_contact/task/phase", TaskPhase, queue_size=10)
         self.safety_sub = rospy.Subscriber("/uav_contact/safety/state", SafetyState, self._on_safety_state)
+        self.sliding_done_sub = rospy.Subscriber("/uav_contact/task/sliding_done", Bool, self._on_sliding_done, queue_size=1)
+        self.sliding_done = False
 
         rospy.loginfo("Task manager node started, phase=IDLE")
 
@@ -43,6 +46,10 @@ class TaskManagerNode:
             self.emergency_requested = True
             self.phase = TaskPhase.EMERGENCY_RETREAT
             self.phase_start_time = rospy.Time.now()
+
+    def _on_sliding_done(self, msg):
+        if bool(msg.data):
+            self.sliding_done = True
 
     def _phase_duration(self):
         return {
@@ -104,6 +111,11 @@ class TaskManagerNode:
             return
 
         if self.phase == TaskPhase.SLIDING_CONTACT:
+            if self.sliding_done:
+                self.phase = TaskPhase.RETREAT
+                self.phase_start_time = rospy.Time.now()
+                self.sliding_done = False
+                rospy.loginfo("Sliding trajectory completed, moving to RETREAT")
             return
 
         duration = self._phase_duration().get(self.phase)
