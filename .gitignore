@@ -1,5 +1,9 @@
 .worktrees/
 build/
 devel/
+catkin_ws/build/
+catkin_ws/devel/
+catkin_ws/logs/
+catkin_ws/.catkin_tools/
 *.pyc
 __pycache__/

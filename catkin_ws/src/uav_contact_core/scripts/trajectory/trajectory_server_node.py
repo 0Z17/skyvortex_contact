@@ -72,6 +72,7 @@ class TrajectoryServer:
         approach_offset_m=0.3,
         approach_time_sec=30.0,
         initial_contact_time_sec=5.0,
+        retreat_distance_m=0.5,
     ):
         self.trajectory_publisher = trajectory_publisher
         self.joint_publisher = joint_publisher
@@ -81,6 +82,7 @@ class TrajectoryServer:
         self.approach_offset_m = float(approach_offset_m)
         self.approach_time_sec = float(approach_time_sec)
         self.initial_contact_time_sec = float(initial_contact_time_sec)
+        self.retreat_distance_m = float(retreat_distance_m)
         self.min_approach_speed_mps = 0.15
         self.waypoints = []
         self.waypoint_index = 0
@@ -102,6 +104,10 @@ class TrajectoryServer:
         self.sliding_index = 0
         self.sliding_active = False
         self._last_sliding_log_time = None
+
+        self.retreat_path = []
+        self.retreat_index = 0
+        self.retreat_active = False
 
     def load_csv(self, csv_path):
         path = Path(csv_path)
@@ -198,6 +204,12 @@ class TrajectoryServer:
         if norm <= 1e-9:
             return 1.0, 0.0, 0.0
         return vx / norm, vy / norm, vz / norm
+
+    @staticmethod
+    def _yaw_from_quaternion(q):
+        siny_cosp = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy_cosp = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        return math.atan2(siny_cosp, cosy_cosp)
 
     def _build_segment(self, start_wp, end_wp, duration_sec):
         num = max(2, int(float(duration_sec) * self.publish_rate_hz))
@@ -402,10 +414,16 @@ class TrajectoryServer:
                 "nz": 0.0,
             }
 
+        nx, ny, nz = self._normalized(
+            float(start_wp.get("nx", 1.0)),
+            float(start_wp.get("ny", 0.0)),
+            float(start_wp.get("nz", 0.0)),
+        )
+
         end_wp = self._make_waypoint(
-            x=float(start_wp["x"]) - 0.5,
-            y=float(start_wp["y"]),
-            z=float(start_wp["z"]),
+            x=float(start_wp["x"]) - self.retreat_distance_m * nx,
+            y=float(start_wp["y"]) - self.retreat_distance_m * ny,
+            z=float(start_wp["z"]) - self.retreat_distance_m * nz,
             psi=float(start_wp["psi"]),
             theta=0.0,
         )
@@ -415,6 +433,10 @@ class TrajectoryServer:
             end_wp=end_wp,
             duration_sec=self.leave_time_sec,
         )
+        for wp in self.retreat_path:
+            wp["nx"] = nx
+            wp["ny"] = ny
+            wp["nz"] = nz
         self.retreat_index = 0
         self.retreat_active = bool(self.retreat_path)
 
@@ -549,10 +571,10 @@ class TrajectoryServer:
                 self._log_sliding_progress()
                 wp = self.sliding_path[self.sliding_index]
                 self._publish_waypoint(wp)
-                if self.sliding_index < len(self.sliding_path) - 1:
+                if self.sliding_index <= len(self.sliding_path) - 1:
                     self.sliding_index += 1
                 return
-            if self.sliding_done_publisher is not None:
+            if (self.sliding_done_publisher is not None) and (self.sliding_active):
                 self.sliding_done_publisher.publish(Bool(data=True))
             self._publish_hover()
             return
@@ -560,7 +582,7 @@ class TrajectoryServer:
         if self.phase == TaskPhase.RETREAT:
             if self.retreat_active and self.retreat_index < len(self.retreat_path):
                 wp = self.retreat_path[self.retreat_index]
-                self._publish_waypoint(wp, zero_velocity=True)
+                self._publish_waypoint(wp)
                 if self.retreat_index < len(self.retreat_path) - 1:
                     self.retreat_index += 1
                 return
@@ -571,12 +593,13 @@ class TrajectoryServer:
 def main():
     rospy.init_node("trajectory_server", anonymous=False)
 
-    path_csv = rospy.get_param("/trajectory_server/path_csv", "")
+    path_csv = rospy.get_param("/trajectory_server/path_csv", "/home/wsl/skyvortex_contact/catkin_ws/src/uav_contact_core/scripts/trajectory/trajectory_server_node.py")
     publish_rate_hz = float(rospy.get_param("/trajectory_server/publish_rate_hz", 50.0))
     leave_time_sec = float(rospy.get_param("/trajectory_server/leave_time_sec", 20.0))
     approach_offset_m = float(rospy.get_param("/trajectory_server/approach_offset_m", 0.3))
     approach_time_sec = float(rospy.get_param("/trajectory_server/approach_time_sec", 30.0))
     initial_contact_time_sec = float(rospy.get_param("/trajectory_server/initial_contact_time_sec", 5.0))
+    retreat_distance_m = float(rospy.get_param("/trajectory_server/retreat_distance_m", 0.5))
 
     resolved_csv_path = path_csv
     prefix = "$(find uav_contact_core)"
@@ -603,6 +626,7 @@ def main():
         approach_offset_m=approach_offset_m,
         approach_time_sec=approach_time_sec,
         initial_contact_time_sec=initial_contact_time_sec,
+        retreat_distance_m=retreat_distance_m,
     )
     server.sliding_done_publisher = sliding_done_publisher
 
@@ -617,10 +641,12 @@ def main():
         server.set_phase(msg.phase)
 
     def _on_local_pose(msg):
+        current_yaw = server._yaw_from_quaternion(msg.pose.orientation)
         server.update_local_pose(
             x=msg.pose.position.x,
             y=msg.pose.position.y,
             z=msg.pose.position.z,
+            psi=current_yaw,
         )
 
     rospy.Subscriber("/uav_contact/task/phase", TaskPhase, _on_task_phase, queue_size=10)

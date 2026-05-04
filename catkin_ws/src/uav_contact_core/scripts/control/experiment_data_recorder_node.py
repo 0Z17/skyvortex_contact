@@ -116,6 +116,7 @@ class ExperimentDataRecorderNode:
             "/uav_contact/safety/state",
             "/uav_contact/contact/normal_velocity_cmd",
             "/mavros/setpoint_raw/local",
+            "/uav_contact/task/sliding_done",
         ]
 
         cmd = ["rosbag", "record", "-O", bag_path] + topics

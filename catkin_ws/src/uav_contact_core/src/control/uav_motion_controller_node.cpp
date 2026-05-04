@@ -8,7 +8,7 @@ namespace uav_contact_core {
 namespace {
 constexpr double kDefaultMaxVelocity = 0.25;
 constexpr double kDefaultMaxNormalVelocity = 0.08;
-constexpr double kDefaultMaxTangentVelocity = 0.15;
+constexpr double kDefaultMaxTangentVelocity = 0.25;
 constexpr double kDefaultPublishRateHz = 50.0;
 constexpr uint16_t kVelocityOnlyTypeMask =
     mavros_msgs::PositionTarget::IGNORE_PX |
@@ -17,7 +17,14 @@ constexpr uint16_t kVelocityOnlyTypeMask =
     mavros_msgs::PositionTarget::IGNORE_AFX |
     mavros_msgs::PositionTarget::IGNORE_AFY |
     mavros_msgs::PositionTarget::IGNORE_AFZ |
-    mavros_msgs::PositionTarget::IGNORE_YAW |
+    mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
+constexpr uint16_t kPositionOnlyTypeMask =
+    mavros_msgs::PositionTarget::IGNORE_VX |
+    mavros_msgs::PositionTarget::IGNORE_VY |
+    mavros_msgs::PositionTarget::IGNORE_VZ |
+    mavros_msgs::PositionTarget::IGNORE_AFX |
+    mavros_msgs::PositionTarget::IGNORE_AFY |
+    mavros_msgs::PositionTarget::IGNORE_AFZ |
     mavros_msgs::PositionTarget::IGNORE_YAW_RATE;
 }  // namespace
 
@@ -28,6 +35,8 @@ UavMotionControllerNode::UavMotionControllerNode()
       p_ref_{0.0, 0.0, 0.0},
       p_meas_{0.0, 0.0, 0.0},
       n_{1.0, 0.0, 0.0},
+      psi_ref_(0.0),
+      vpsi_ref_(0.0),
       v_normal_cmd_(0.0),
       task_phase_(uav_contact_msgs::TaskPhase::IDLE),
       safety_unsafe_(false),
@@ -39,9 +48,12 @@ UavMotionControllerNode::UavMotionControllerNode()
       max_velocity_(kDefaultMaxVelocity),
       max_normal_velocity_(kDefaultMaxNormalVelocity),
       max_tangent_velocity_(kDefaultMaxTangentVelocity),
-      tangent_position_kp_(0.5),
+      tangent_position_kp_(1.0),
+      retreat_normal_velocity_(0.03),
       publish_rate_hz_(kDefaultPublishRateHz),
       input_timeout_sec_(0.5),
+      approach_use_position_mode_(true),
+      approach_max_position_deviation_(0.3),
       has_velocity_ref_(false),
       has_pose_ref_(false),
       has_pose_meas_(false),
@@ -56,10 +68,16 @@ UavMotionControllerNode::UavMotionControllerNode()
   pnh_.param("max_normal_velocity", max_normal_velocity_, max_normal_velocity_);
   pnh_.param("max_tangent_velocity", max_tangent_velocity_, max_tangent_velocity_);
   pnh_.param("tangent_position_kp", tangent_position_kp_, tangent_position_kp_);
+  pnh_.param("retreat_normal_velocity", retreat_normal_velocity_, retreat_normal_velocity_);
   pnh_.param("publish_rate_hz", publish_rate_hz_, publish_rate_hz_);
   pnh_.param("input_timeout_sec", input_timeout_sec_, input_timeout_sec_);
   pnh_.param("zero_when_not_offboard_ready", zero_when_not_offboard_ready_,
              zero_when_not_offboard_ready_);
+  pnh_.param("approach_use_position_mode", approach_use_position_mode_,
+             approach_use_position_mode_);
+  pnh_.param("approach_max_position_deviation",
+             approach_max_position_deviation_,
+             approach_max_position_deviation_);
 
   trajectory_ref_sub_ = nh_.subscribe(
       "/uav_contact/trajectory/reference", 10,
@@ -101,6 +119,8 @@ void UavMotionControllerNode::TrajectoryReferenceCallback(
   p_ref_[0] = msg->x;
   p_ref_[1] = msg->y;
   p_ref_[2] = msg->z;
+  psi_ref_ = msg->psi;
+  vpsi_ref_ = msg->vpsi;
   has_velocity_ref_ = true;
   has_pose_ref_ = true;
   last_velocity_ref_time_ = ros::Time::now();
@@ -162,8 +182,7 @@ std::array<double, 3> UavMotionControllerNode::TangentialComponent(
   };
 }
 
-std::array<double, 3> UavMotionControllerNode::FuseVelocityCommand() const {
-  const std::array<double, 3> normal = NormalizedNormal();
+std::array<double, 3> UavMotionControllerNode::TangentialTrackingVelocityCommand() const {
   std::array<double, 3> tangent_ff = TangentialComponent(v_ref_);
 
   if (has_pose_ref_ && has_pose_meas_) {
@@ -178,10 +197,26 @@ std::array<double, 3> UavMotionControllerNode::FuseVelocityCommand() const {
     tangent_ff[2] += tangent_position_kp_ * p_error_tangent[2];
   }
 
-  const std::array<double, 3> tangential =
-      ClampNorm(tangent_ff, max_tangent_velocity_);
+  return ClampNorm(tangent_ff, max_tangent_velocity_);
+}
+
+std::array<double, 3> UavMotionControllerNode::FuseVelocityCommand() const {
+  const std::array<double, 3> normal = NormalizedNormal();
+  const std::array<double, 3> tangential = TangentialTrackingVelocityCommand();
   const double normal_velocity = std::max(
       -max_normal_velocity_, std::min(v_normal_cmd_, max_normal_velocity_));
+  return {
+      tangential[0] + normal_velocity * normal[0],
+      tangential[1] + normal_velocity * normal[1],
+      tangential[2] + normal_velocity * normal[2],
+  };
+}
+
+std::array<double, 3> UavMotionControllerNode::RetreatVelocityCommand() const {
+  const std::array<double, 3> normal = NormalizedNormal();
+  const std::array<double, 3> tangential = TangentialTrackingVelocityCommand();
+  const double normal_velocity = -std::min(
+      std::fabs(retreat_normal_velocity_), max_normal_velocity_);
   return {
       tangential[0] + normal_velocity * normal[0],
       tangential[1] + normal_velocity * normal[1],
@@ -200,6 +235,42 @@ std::array<double, 3> UavMotionControllerNode::ClampNorm(
   return {v[0] * scale, v[1] * scale, v[2] * scale};
 }
 
+void UavMotionControllerNode::PublishApproachPositionSetpoint(
+    const ros::Time& stamp) {
+  std::array<double, 3> target = p_ref_;
+  const std::array<double, 3> delta = {
+      p_ref_[0] - p_meas_[0],
+      p_ref_[1] - p_meas_[1],
+      p_ref_[2] - p_meas_[2],
+  };
+  const double distance =
+      std::sqrt(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]);
+  const double max_deviation = std::max(0.0, approach_max_position_deviation_);
+  if (max_deviation > 0.0 && distance > max_deviation) {
+    const double scale = max_deviation / distance;
+    target = {
+        p_meas_[0] + delta[0] * scale,
+        p_meas_[1] + delta[1] * scale,
+        p_meas_[2] + delta[2] * scale,
+    };
+  }
+
+  mavros_msgs::PositionTarget msg;
+  msg.header.stamp = stamp;
+  msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
+  msg.type_mask = kPositionOnlyTypeMask;
+  msg.position.x = target[0];
+  msg.position.y = target[1];
+  msg.position.z = target[2];
+  msg.velocity.x = 0.0;
+  msg.velocity.y = 0.0;
+  msg.velocity.z = 0.0;
+  msg.yaw = psi_ref_;
+  msg.yaw_rate = 0.0;
+
+  setpoint_pub_.publish(msg);
+}
+
 void UavMotionControllerNode::PublishSetpoint() {
   const ros::Time now = ros::Time::now();
 
@@ -211,6 +282,8 @@ void UavMotionControllerNode::PublishSetpoint() {
     msg.velocity.x = 0.0;
     msg.velocity.y = 0.0;
     msg.velocity.z = 0.0;
+    msg.yaw = psi_ref_;
+    msg.yaw_rate = 0.0;
     setpoint_pub_.publish(msg);
     return;
   }
@@ -241,6 +314,11 @@ void UavMotionControllerNode::PublishSetpoint() {
       const bool velocity_ref_fresh =
           has_velocity_ref_ &&
           ((now - last_velocity_ref_time_).toSec() <= input_timeout_sec_);
+      if (!should_override && approach_use_position_mode_ &&
+          velocity_ref_fresh && has_pose_ref_ && has_pose_meas_) {
+        PublishApproachPositionSetpoint(now);
+        return;
+      }
       if (velocity_ref_fresh) {
         clamped = ClampNorm(v_ref_, max_tangent_velocity_);
       }
@@ -267,7 +345,7 @@ void UavMotionControllerNode::PublishSetpoint() {
           has_velocity_ref_ &&
           ((now - last_velocity_ref_time_).toSec() <= input_timeout_sec_);
       if (velocity_ref_fresh) {
-        clamped = ClampNorm(v_ref_, max_tangent_velocity_);
+        clamped = ClampNorm(RetreatVelocityCommand(), max_velocity_);
       }
       break;
     }
@@ -292,6 +370,8 @@ void UavMotionControllerNode::PublishSetpoint() {
   msg.velocity.x = clamped[0];
   msg.velocity.y = clamped[1];
   msg.velocity.z = clamped[2];
+  msg.yaw = psi_ref_;
+  msg.yaw_rate = 0.0;
 
   setpoint_pub_.publish(msg);
 }
