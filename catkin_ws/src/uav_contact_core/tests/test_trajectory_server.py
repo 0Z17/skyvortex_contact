@@ -178,7 +178,7 @@ def test_publish_initial_contact_advances_segment_index_and_has_velocity():
         assert msg.vx != 0.0 or msg.vy != 0.0 or msg.vz != 0.0
 
 
-def test_sliding_builds_cost_interpolated_path():
+def test_sliding_builds_cost_interpolated_path_with_nonzero_differential_velocity():
     module = _load_trajectory_module()
     server = module.TrajectoryServer()
     server.waypoints = _sample_waypoints()
@@ -188,6 +188,10 @@ def test_sliding_builds_cost_interpolated_path():
     assert len(server.sliding_path) > len(server.waypoints)
     assert pytest.approx(server.sliding_path[0]["x"], rel=1e-9) == server.waypoints[0]["x"]
     assert pytest.approx(server.sliding_path[-1]["x"], rel=1e-9) == server.waypoints[-1]["x"]
+    assert any(
+        abs(wp["vx"]) > 0.0 or abs(wp["vy"]) > 0.0 or abs(wp["vz"]) > 0.0
+        for wp in server.sliding_path
+    )
 
 
 def test_publish_sliding_advances_over_cost_interpolated_path():

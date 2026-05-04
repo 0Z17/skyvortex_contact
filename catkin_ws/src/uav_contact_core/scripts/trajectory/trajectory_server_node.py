@@ -242,13 +242,26 @@ class TrajectoryServer:
                 np.array([end_wp["x"], end_wp["y"], end_wp["z"], end_wp["psi"], end_wp["theta"]], dtype=float),
                 num=num,
             )
+            step = (interpolate[1] - interpolate[0]) if len(interpolate) > 1 else np.zeros(5, dtype=float)
             for row in interpolate[:-1]:
                 wp = self._make_waypoint(row[0], row[1], row[2], row[3], row[4])
+                wp["vx"] = float(step[0])
+                wp["vy"] = float(step[1])
+                wp["vz"] = float(step[2])
+                wp["vpsi"] = float(step[3])
+                wp["vtheta"] = float(step[4])
                 sliding_path.append(wp)
-        sliding_path.append(self._make_waypoint(
+        last_wp = self._make_waypoint(
             self.waypoints[-1]["x"], self.waypoints[-1]["y"], self.waypoints[-1]["z"],
             self.waypoints[-1]["psi"], self.waypoints[-1]["theta"]
-        ))
+        )
+        if sliding_path:
+            last_wp["vx"] = float(sliding_path[-1]["vx"])
+            last_wp["vy"] = float(sliding_path[-1]["vy"])
+            last_wp["vz"] = float(sliding_path[-1]["vz"])
+            last_wp["vpsi"] = float(sliding_path[-1]["vpsi"])
+            last_wp["vtheta"] = float(sliding_path[-1]["vtheta"])
+        sliding_path.append(last_wp)
         self.sliding_path = sliding_path
         self.sliding_index = 0
         self.sliding_active = bool(sliding_path)
