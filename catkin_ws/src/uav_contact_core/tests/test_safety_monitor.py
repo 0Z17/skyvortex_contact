@@ -38,6 +38,7 @@ def _load_safety_module():
         Rate=lambda hz: types.SimpleNamespace(sleep=lambda: None),
         is_shutdown=lambda: True,
         loginfo=lambda *args, **kwargs: None,
+        logwarn_throttle=lambda *args, **kwargs: None,
     )
 
     class _TaskPhase:
@@ -59,7 +60,7 @@ def _load_safety_module():
     sys.modules["rospy"] = rospy_stub
     sys.modules["geometry_msgs.msg"] = types.SimpleNamespace(PoseStamped=object, Vector3=object)
     sys.modules["sensor_msgs.msg"] = types.SimpleNamespace(Imu=object)
-    sys.modules["mavros_msgs.msg"] = types.SimpleNamespace(State=object)
+    sys.modules["mavros_msgs.msg"] = types.SimpleNamespace(ActuatorControl=object, State=object)
     sys.modules["std_msgs.msg"] = types.SimpleNamespace(Float64=object)
     sys.modules["uav_contact_msgs.msg"] = types.SimpleNamespace(SafetyState=_SafetyState, TaskPhase=_TaskPhase)
 
@@ -107,3 +108,36 @@ def test_offboard_drop_in_active_phase_requests_emergency():
     assert safe is False
     assert emergency is True
     assert state == module.SafetyState.EMERGENCY_RETREAT_REQUIRED
+
+
+def test_motor_output_warning_keeps_state_safe():
+    module = _load_safety_module()
+    node = module.SafetyMonitorNode()
+    node.require_offboard = False
+    node.require_armed = False
+    node.mavros_connected = True
+    node.enable_motor_output_warning = True
+    node.high_motor_outputs = [(2, 0.9)]
+
+    state, safe, emergency, reason = node.evaluate()
+
+    assert safe is True
+    assert emergency is False
+    assert state == module.SafetyState.NORMAL
+    assert "MOTOR_OUTPUT_HIGH" in reason
+
+
+def test_contact_loss_is_warning_not_hard_stop():
+    module = _load_safety_module()
+    node = module.SafetyMonitorNode()
+    node.require_offboard = False
+    node.require_armed = False
+    node.mavros_connected = True
+    node.current_distance = node.contact_loss_distance + 0.01
+
+    state, safe, emergency, reason = node.evaluate()
+
+    assert safe is True
+    assert emergency is False
+    assert state == module.SafetyState.CONTACT_LOSS
+    assert "CONTACT_LOSS" in reason

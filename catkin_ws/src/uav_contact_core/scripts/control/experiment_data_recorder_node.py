@@ -11,12 +11,35 @@ from mavros_msgs.msg import State as MavrosState
 from uav_contact_msgs.msg import TaskPhase, TrajectoryPoint
 
 
+DEFAULT_RECORD_TOPICS = [
+    "/uav_contact/trajectory/reference",
+    "/mavros/local_position/pose",
+    "/mavros/local_position/velocity_local",
+    "/uav_contact/diagnostics/position_error_ref_minus_meas",
+    "/uav_contact/diagnostics/velocity_error_ref_minus_meas",
+    "/mavros/state",
+    "/uav_contact/task/phase",
+    "/uav_contact/safety/state",
+    "/uav_contact/contact/normal_velocity_cmd",
+    "/mavros/setpoint_raw/local",
+    "/uav_contact/task/sliding_done",
+]
+
+
 class ExperimentDataRecorderNode:
     def __init__(self):
         rospy.init_node("experiment_data_recorder", anonymous=False)
 
-        self.output_dir = rospy.get_param("~output_dir", os.path.expanduser("~/rosbag/uav_contact"))
-        self.prefix = rospy.get_param("~file_prefix", "uav_contact_exp")
+        self.output_dir = rospy.get_param(
+            "/experiment_data_recorder/output_dir",
+            rospy.get_param("~output_dir", os.path.expanduser("~/rosbag/uav_contact")),
+        )
+        self.prefix = rospy.get_param(
+            "/experiment_data_recorder/file_prefix",
+            rospy.get_param("~file_prefix", "uav_contact_exp"),
+        )
+        self.output_dir = os.path.expanduser(str(self.output_dir))
+        self.record_topics = self._load_record_topics()
 
         self.expected_pos = None
         self.expected_vel = None
@@ -101,25 +124,35 @@ class ExperimentDataRecorderNode:
                 self._vector_msg("map", ref_minus_meas)
             )
 
+    @staticmethod
+    def _clean_topic_list(topics):
+        cleaned = []
+        for topic in topics:
+            topic = str(topic).strip()
+            if topic:
+                cleaned.append(topic)
+        return cleaned
+
+    def _load_record_topics(self):
+        topics = rospy.get_param(
+            "/experiment_data_recorder/record_topics",
+            rospy.get_param("~record_topics", DEFAULT_RECORD_TOPICS),
+        )
+        if not isinstance(topics, list):
+            rospy.logwarn("record_topics must be a list, using default recorder topics")
+            topics = DEFAULT_RECORD_TOPICS
+
+        cleaned = self._clean_topic_list(topics)
+        if not cleaned:
+            rospy.logwarn("record_topics is empty, using default recorder topics")
+            cleaned = list(DEFAULT_RECORD_TOPICS)
+        return cleaned
+
     def _start_rosbag_record(self):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         bag_path = os.path.join(self.output_dir, "{}_{}.bag".format(self.prefix, ts))
 
-        topics = [
-            "/uav_contact/trajectory/reference",
-            "/mavros/local_position/pose",
-            "/mavros/local_position/velocity_local",
-            "/uav_contact/diagnostics/position_error_ref_minus_meas",
-            "/uav_contact/diagnostics/velocity_error_ref_minus_meas",
-            "/mavros/state",
-            "/uav_contact/task/phase",
-            "/uav_contact/safety/state",
-            "/uav_contact/contact/normal_velocity_cmd",
-            "/mavros/setpoint_raw/local",
-            "/uav_contact/task/sliding_done",
-        ]
-
-        cmd = ["rosbag", "record", "-O", bag_path] + topics
+        cmd = ["rosbag", "record", "-O", bag_path] + self.record_topics
         rospy.loginfo("Starting rosbag: %s", " ".join(cmd))
         return subprocess.Popen(cmd, preexec_fn=os.setsid)
 

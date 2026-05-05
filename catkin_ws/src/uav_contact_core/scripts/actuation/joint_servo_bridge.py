@@ -22,6 +22,13 @@ def clamp_joint_angle(angle, joint_min, joint_max):
     return max(min(float(angle), float(joint_max)), float(joint_min))
 
 
+def bridge_param(name, default):
+    return rospy.get_param(
+        "/joint_servo_bridge/{}".format(name),
+        rospy.get_param("~{}".format(name), default),
+    )
+
+
 class JointServoBridge:
     def __init__(self, joint_min=-1.57, joint_max=1.57, neutral_theta=0.0):
         self.joint_min = float(joint_min)
@@ -49,34 +56,37 @@ def main():
         raise RuntimeError("rospy, std_msgs and uav_contact_msgs are required to run joint_servo_bridge.py")
 
     rospy.init_node("joint_servo_bridge", anonymous=False)
-    publish_rate_hz = float(rospy.get_param("~publish_rate_hz", 50.0))
+    publish_rate_hz = float(bridge_param("publish_rate_hz", 50.0))
 
     bridge = JointServoBridge(
-        joint_min=float(rospy.get_param("~joint_min", -1.57)),
-        joint_max=float(rospy.get_param("~joint_max", 1.57)),
-        neutral_theta=float(rospy.get_param("~neutral_theta", 0.0)),
+        joint_min=float(bridge_param("joint_min", -1.57)),
+        joint_max=float(bridge_param("joint_max", 1.57)),
+        neutral_theta=float(bridge_param("neutral_theta", 0.0)),
     )
 
-    enabled_phases = rospy.get_param(
-        "~enable_in_phases",
+    enabled_phases = bridge_param(
+        "enable_in_phases",
         [TaskPhase.APPROACH, TaskPhase.INITIAL_CONTACT,
          TaskPhase.SLIDING_CONTACT, TaskPhase.RETREAT],
     )
 
-    use_dynamixel = bool(rospy.get_param("~use_dynamixel", True))
-    servo_joint_offset = float(rospy.get_param("~servo_joint_offset", 0.0))
-    servo_profile_velocity = int(rospy.get_param("~servo_profile_velocity", 30))
-    servo_operating_mode = int(rospy.get_param("~servo_operating_mode", 4))
+    output_mode = str(bridge_param("output_mode", "dynamixel")).strip().lower()
+    if output_mode not in ("dynamixel", "topic"):
+        rospy.logwarn("Unknown output_mode '%s', fallback to dynamixel", output_mode)
+        output_mode = "dynamixel"
+    servo_joint_offset = float(bridge_param("servo_joint_offset", 0.0))
+    servo_profile_velocity = int(bridge_param("servo_profile_velocity", 30))
+    servo_operating_mode = int(bridge_param("servo_operating_mode", 4))
 
     ctrl = None
-    if use_dynamixel:
+    if output_mode == "dynamixel":
         try:
             from dynamixel_control import DynamixelController
 
             ctrl = DynamixelController(
-                dxl_id=int(rospy.get_param("~dxl_id", 1)),
-                baudrate=int(rospy.get_param("~dxl_baudrate", 57600)),
-                devicename=str(rospy.get_param("~dxl_devicename", "/dev/ttyUSB1")),
+                dxl_id=int(bridge_param("dxl_id", 1)),
+                baudrate=int(bridge_param("dxl_baudrate", 57600)),
+                devicename=str(bridge_param("dxl_devicename", "/dev/ttyUSB1")),
             )
             ctrl.initialize()
             ctrl.set_operating_mode(servo_operating_mode)
@@ -99,7 +109,10 @@ def main():
     joint_state_pub = rospy.Publisher("/uav_contact/joint/state", Float64, queue_size=10)
 
     rate = rospy.Rate(publish_rate_hz)
-    rospy.loginfo("Joint servo bridge started")
+    if ctrl is not None:
+        rospy.loginfo("Joint servo bridge started in dynamixel mode")
+    else:
+        rospy.loginfo("Joint servo bridge started in topic-only mode")
 
     while not rospy.is_shutdown():
         joint_cmd = bridge.current_joint_command()

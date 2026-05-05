@@ -3,7 +3,7 @@
 import math
 import rospy
 from geometry_msgs.msg import PoseStamped
-from mavros_msgs.msg import State as MavrosState
+from mavros_msgs.msg import ActuatorControl, State as MavrosState
 from std_msgs.msg import Float64
 from uav_contact_msgs.msg import SafetyState, TaskPhase
 
@@ -24,16 +24,29 @@ class SafetyMonitorNode:
         self.require_offboard = bool(rospy.get_param("/safety_monitor/require_offboard", True))
         self.require_armed = bool(rospy.get_param("/safety_monitor/require_armed", True))
         self.offboard_drop_emergency = bool(rospy.get_param("/safety_monitor/offboard_drop_emergency", True))
+        self.enable_motor_output_warning = bool(
+            rospy.get_param("/safety_monitor/enable_motor_output_warning", False)
+        )
+        self.motor_output_topic = str(
+            rospy.get_param("/safety_monitor/motor_output_topic", "/mavros/actuator_control")
+        )
+        self.motor_output_warning_threshold = float(
+            rospy.get_param("/safety_monitor/motor_output_warning_threshold", 0.85)
+        )
+        self.motor_output_indices = rospy.get_param("/safety_monitor/motor_output_indices", [])
 
         self.last_imu_time = rospy.Time(0)
         self.last_mavros_state_time = rospy.Time(0)
         self.last_distance_time = rospy.Time(0)
         self.last_pose_time = rospy.Time(0)
+        self.last_motor_output_time = rospy.Time(0)
 
         self.current_roll = 0.0
         self.current_pitch = 0.0
         self.current_distance = None
         self.prev_distance = None
+        self.current_motor_outputs = []
+        self.high_motor_outputs = []
         self.mavros_connected = False
         self.mavros_mode = ""
         self.mavros_armed = False
@@ -45,6 +58,8 @@ class SafetyMonitorNode:
         rospy.Subscriber("/mavros/state", MavrosState, self._on_mavros_state, queue_size=10)
         rospy.Subscriber("/contact/distance", Float64, self._on_distance, queue_size=10)
         rospy.Subscriber("/uav_contact/task/phase", TaskPhase, self._on_task_phase, queue_size=10)
+        if self.enable_motor_output_warning:
+            rospy.Subscriber(self.motor_output_topic, ActuatorControl, self._on_motor_output, queue_size=10)
 
         rospy.loginfo("Safety monitor node started")
 
@@ -75,6 +90,35 @@ class SafetyMonitorNode:
 
     def _on_task_phase(self, msg):
         self.current_phase = msg.phase
+
+    def _on_motor_output(self, msg):
+        self.last_motor_output_time = rospy.Time.now()
+        self.current_motor_outputs = [float(value) for value in msg.controls]
+
+        if self.motor_output_indices:
+            candidate_indices = [int(index) for index in self.motor_output_indices]
+        else:
+            candidate_indices = list(range(len(self.current_motor_outputs)))
+
+        high_outputs = []
+        for index in candidate_indices:
+            if index < 0 or index >= len(self.current_motor_outputs):
+                continue
+            normalized = abs(self.current_motor_outputs[index])
+            if normalized > self.motor_output_warning_threshold:
+                high_outputs.append((index, normalized))
+        self.high_motor_outputs = high_outputs
+
+    def _motor_output_warning_reason(self):
+        if not self.high_motor_outputs:
+            return ""
+        details = " ".join(
+            "motor{}={:.2f}".format(index, value)
+            for index, value in self.high_motor_outputs
+        )
+        return "MOTOR_OUTPUT_HIGH {} threshold={:.2f}".format(
+            details, self.motor_output_warning_threshold
+        )
 
     def evaluate(self):
         now = rospy.Time.now()
@@ -126,8 +170,8 @@ class SafetyMonitorNode:
                 self.current_roll, self.current_pitch)
         elif self.current_distance is not None and self.current_distance > self.contact_loss_distance:
             state = SafetyState.CONTACT_LOSS
-            safe = False
             reason = "CONTACT_LOSS distance={:.3f}".format(self.current_distance)
+            rospy.logwarn_throttle(1.0, reason)
         elif (
             self.current_distance is not None
             and self.prev_distance is not None
@@ -138,6 +182,14 @@ class SafetyMonitorNode:
             safe = False
             reason = "DISTANCE_JUMP prev={:.3f} cur={:.3f}".format(
                 self.prev_distance, self.current_distance)
+
+        motor_warning = ""
+        if self.enable_motor_output_warning:
+            motor_warning = self._motor_output_warning_reason()
+            if motor_warning:
+                rospy.logwarn_throttle(1.0, motor_warning)
+                if safe:
+                    reason = motor_warning
 
         if require_emergency and self.current_phase in (
             TaskPhase.APPROACH, TaskPhase.INITIAL_CONTACT,

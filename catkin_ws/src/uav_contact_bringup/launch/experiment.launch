@@ -14,6 +14,7 @@
   <rosparam file="$(find uav_contact_bringup)/config/kinematics.yaml" command="load"/>
   <rosparam file="$(find uav_contact_bringup)/config/servo.yaml" command="load"/>
   <rosparam file="$(find uav_contact_bringup)/config/safety.yaml" command="load"/>
+  <rosparam file="$(find uav_contact_bringup)/config/experiment_data_recorder.yaml" command="load"/>
 
   <include if="$(arg start_mavros)" file="$(find mavros)/launch/px4.launch">
     <arg name="fcu_url" value="/dev/ttyACM0:57600"/>
@@ -26,7 +27,15 @@
     <node pkg="uav_contact_core" type="uav_motion_controller_node" name="uav_motion_controller" output="screen"/>
     <node pkg="uav_contact_core" type="end_effector_kinematics_node.py" name="end_effector_kinematics" output="screen"/>
     <node pkg="uav_contact_core" type="joint_servo_bridge.py" name="joint_servo_bridge" output="screen"/>
+    <node pkg="uav_contact_core" type="joint_servo_gazebo_relay.py" name="joint_servo_gazebo_relay" output="screen"/>
     <node pkg="uav_contact_core" type="safety_monitor_node.py" name="safety_monitor" output="screen"/>
     <node pkg="uav_contact_core" type="experiment_data_recorder_node.py" name="experiment_data_recorder" output="screen"/>
+
+    <!-- TEST ONLY: temporary Gazebo contact-distance source from connect_joint. Remove after replacing with the real distance sensor. -->
+    <node pkg="topic_tools"
+          type="transform"
+          name="test_contact_distance_from_connect_joint"
+          output="screen"
+          args="/joint_states /contact/distance std_msgs/Float64 &quot;std_msgs.msg.Float64(m.position[m.name.index('connect_joint')])&quot; --import std_msgs"/>
   </group>
 </launch>

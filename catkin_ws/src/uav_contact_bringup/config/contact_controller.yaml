@@ -1,11 +1,16 @@
 contact_controller:
   rate: 50.0
   desired_distance: 0.03
-  max_normal_velocity: 0.08
+  max_normal_velocity: 0.05
+  max_press_velocity: 0.035
+  max_release_velocity: 0.025
+  normal_velocity_slew_rate: 0.04
+  distance_filter_alpha: 0.25
+  distance_deadband: 0.005
   pid:
     kp: 0.8
     ki: 0.0
-    kd: 0.05
+    kd: 0.0
   enabled_phases:
     - 3
     - 4

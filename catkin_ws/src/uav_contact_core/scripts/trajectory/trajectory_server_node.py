@@ -69,7 +69,7 @@ class TrajectoryServer:
         joint_publisher=None,
         publish_rate_hz=50.0,
         leave_time_sec=20.0,
-        approach_offset_m=0.3,
+        approach_offset_m=0.5,
         approach_time_sec=30.0,
         initial_contact_time_sec=5.0,
         retreat_distance_m=0.5,

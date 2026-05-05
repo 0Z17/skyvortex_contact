@@ -11,3 +11,7 @@ safety_monitor:
   require_offboard: true
   require_armed: true
   offboard_drop_emergency: true
+  enable_motor_output_warning: true
+  motor_output_topic: "/mavros/actuator_control"
+  motor_output_warning_threshold: 0.85
+  motor_output_indices: []  # Empty means check every normalized output in the message.

@@ -8,10 +8,16 @@ joint_servo_bridge:
     - 3  # INITIAL_CONTACT
     - 4  # SLIDING_CONTACT
     - 5  # RETREAT
-  use_dynamixel: true
-  servo_joint_offset: 0.0
+  output_mode: "topic"  # dynamixel | topic
+  servo_joint_offset: -0.52
   servo_operating_mode: 4
   servo_profile_velocity: 30
   dxl_id: 1
   dxl_baudrate: 57600
   dxl_devicename: "/dev/ttyUSB1"
+
+joint_servo_gazebo_relay:
+  enabled: true
+  input_topic: "/servo/command"
+  output_topic: "/skyvortex/operator_1_joint/pos_cmd"
+  joint_offset: -0.52
