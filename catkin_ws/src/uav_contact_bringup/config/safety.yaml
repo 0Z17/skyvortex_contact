@@ -9,7 +9,7 @@ safety_monitor:
   enable_sensor_timeout_check: false
   enable_mavros_timeout_check: false
   require_offboard: true
-  require_armed: true
+  require_armed: false
   offboard_drop_emergency: true
   enable_motor_output_warning: true
   motor_output_topic: "/mavros/actuator_control"

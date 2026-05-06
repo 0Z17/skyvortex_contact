@@ -8,13 +8,13 @@ joint_servo_bridge:
     - 3  # INITIAL_CONTACT
     - 4  # SLIDING_CONTACT
     - 5  # RETREAT
-  output_mode: "topic"  # dynamixel | topic
-  servo_joint_offset: -0.52
+  output_mode: "dynamixel"  # dynamixel | topic
+  servo_joint_offset: 0.0
   servo_operating_mode: 4
   servo_profile_velocity: 30
   dxl_id: 1
   dxl_baudrate: 57600
-  dxl_devicename: "/dev/ttyUSB1"
+  dxl_devicename: "/dev/uav/joint_servo"
 
 joint_servo_gazebo_relay:
   enabled: true

@@ -6,6 +6,6 @@ uav_motion_controller_node:
   retreat_normal_velocity: 0.03
   publish_rate_hz: 50.0
   input_timeout_sec: 0.5
-  zero_when_not_offboard_ready: true
+  zero_when_not_offboard_ready: false
   approach_use_position_mode: true
   approach_max_position_deviation: 0.3

@@ -43,9 +43,9 @@ TRANS_RATE = 4.99023                        # 传动比
 PROTOCOL_VERSION            = 2.0               # See which protocol version is used in the Dynamixel
 
 # Default setting
-DEFAULT_DXL_ID              = 1                 # Dynamixel ID : 1
-DEFAULT_BAUDRATE            = 57600             # Dynamixel default baudrate : 57600
-DEFAULT_DEVICENAME          = '/dev/ttyUSB1'    # ex) Windows: "COM1"   Linux: "/dev/ttyUSB0" Mac: "/dev/tty.usbserial-*"
+DEFAULT_DXL_ID              = 1                         # Dynamixel ID : 1
+DEFAULT_BAUDRATE            = 57600                     # Dynamixel default baudrate : 57600
+DEFAULT_DEVICENAME          = '/dev/uav/joint_servo'    # ex) Windows: "COM1"   Linux: "/dev/ttyUSB0" Mac: "/dev/tty.usbserial-*"
 
 TORQUE_ENABLE               = 1                 # Value for enabling the torque
 TORQUE_DISABLE              = 0                 # Value for disabling the torque

@@ -36,16 +36,17 @@ class JointServoBridge:
         if self.joint_max <= self.joint_min:
             raise ValueError("joint_max must be > joint_min")
         self.neutral_theta = float(neutral_theta)
-        self.latest_theta = 0.0
+        self.command_theta = 0.0
+        self.measured_theta = 0.0
         self.phase_enabled = False
 
     def update_theta(self, theta):
-        self.latest_theta = clamp_joint_angle(theta, self.joint_min, self.joint_max)
+        self.command_theta = clamp_joint_angle(theta, self.joint_min, self.joint_max)
 
     def current_joint_command(self):
         if not self.phase_enabled:
             return self.neutral_theta
-        return self.latest_theta
+        return self.command_theta
 
     def set_phase_enabled(self, enabled):
         self.phase_enabled = bool(enabled)
@@ -81,12 +82,16 @@ def main():
     ctrl = None
     if output_mode == "dynamixel":
         try:
+            import os
+            import sys
+
+            sys.path.insert(0, os.path.dirname(__file__))
             from dynamixel_control import DynamixelController
 
             ctrl = DynamixelController(
                 dxl_id=int(bridge_param("dxl_id", 1)),
                 baudrate=int(bridge_param("dxl_baudrate", 57600)),
-                devicename=str(bridge_param("dxl_devicename", "/dev/ttyUSB1")),
+                devicename=str(bridge_param("dxl_devicename", "/dev/uav/joint_servo")),
             )
             ctrl.initialize()
             ctrl.set_operating_mode(servo_operating_mode)
@@ -122,11 +127,11 @@ def main():
             try:
                 ctrl.set_pos_rad(float(joint_cmd) + servo_joint_offset)
                 measured = float(ctrl.get_present_rad()) - servo_joint_offset
-                bridge.latest_theta = clamp_joint_angle(measured, bridge.joint_min, bridge.joint_max)
+                bridge.measured_theta = clamp_joint_angle(measured, bridge.joint_min, bridge.joint_max)
             except Exception as exc:
                 rospy.logwarn_throttle(2.0, "Dynamixel runtime error: %s", exc)
 
-        joint_state_pub.publish(Float64(data=bridge.latest_theta))
+        joint_state_pub.publish(Float64(data=bridge.measured_theta))
         rate.sleep()
 
 
