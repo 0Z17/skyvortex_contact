@@ -1,0 +1,4 @@
+laser_distance_relay:
+  init_duration: 5.0
+  laser_topic: "/laser"
+  distance_topic: "/contact/distance"

@@ -115,7 +115,7 @@ if __name__ == '__main__':
     print("Serial client started")
     # get the serial port from the parameter server
     # port = rospy.get_param('~port', '/dev/ttyUSB_end_effector')
-    port = rospy.get_param('~port', '/dev/ttyUSB3')
+    port = rospy.get_param('~port', '/dev/uav/end_effector')
     baud_rate = rospy.get_param('~baud_rate', 115200)
     # open the serial port
     ser = serial.Serial(port, baud_rate, timeout=1)
