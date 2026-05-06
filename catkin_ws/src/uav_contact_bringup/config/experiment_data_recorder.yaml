@@ -19,3 +19,4 @@ experiment_data_recorder:
     - "/mavros/setpoint_raw/target_local"
     - "/mavros/local_position/odom"
     - "/mavros/imu/data"
+    - "/end_effector_velocity"

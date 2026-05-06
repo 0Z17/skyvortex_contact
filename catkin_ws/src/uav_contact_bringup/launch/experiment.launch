@@ -30,5 +30,6 @@
     <node pkg="uav_contact_core" type="joint_servo_gazebo_relay.py" name="joint_servo_gazebo_relay" output="screen"/>
     <node pkg="uav_contact_core" type="safety_monitor_node.py" name="safety_monitor" output="screen"/>
     <node pkg="uav_contact_core" type="experiment_data_recorder_node.py" name="experiment_data_recorder" output="screen"/>
+    <node pkg="uav_contact_core" type="end_effector_client.py" name="end_effector_client" output="screen"/>
   </group>
 </launch>

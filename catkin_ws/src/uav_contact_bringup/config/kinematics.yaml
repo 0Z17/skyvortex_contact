@@ -3,4 +3,4 @@ end_effector_kinematics:
   tool_offset_x: 0.0
   tool_offset_y: 0.0
   tool_offset_z: 0.0
-  link_length: 0.3
+  link_length: 0.9

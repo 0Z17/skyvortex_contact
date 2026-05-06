@@ -36,5 +36,6 @@ catkin_install_python(PROGRAMS
   scripts/actuation/dynamixel_control.py 
   scripts/control/dist_pid_controller.py
   scripts/control/experiment_data_recorder_node.py
+  scripts/kinematics/end_effector_client.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

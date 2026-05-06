@@ -109,6 +109,8 @@ class EndEffectorTwistController:
         msg.linear.x = -vx
         msg.linear.y = vy
         msg.linear.z = 0.0
+
+        # print(f"Computed end-effector velocity: vx={vx:.3f}, vy={vy:.3f}, normal={n}")
         return msg
 
 
