@@ -29,13 +29,14 @@ target_link_libraries(uav_motion_controller_node
 catkin_install_python(PROGRAMS
   scripts/task/task_manager_node.py
   scripts/trajectory/trajectory_server_node.py
-  scripts/kinematics/end_effector_kinematics_node.py
+  scripts/end_effector/end_effector_kinematics_node.py
   scripts/safety/safety_monitor_node.py
   scripts/actuation/joint_servo_bridge.py
   scripts/actuation/joint_servo_gazebo_relay.py
   scripts/actuation/dynamixel_control.py 
-  scripts/control/dist_pid_controller.py
-  scripts/control/experiment_data_recorder_node.py
-  scripts/kinematics/end_effector_client.py
+  scripts/contact/dist_pid_controller.py
+  scripts/contact/experiment_data_recorder_node.py
+  scripts/end_effector/end_effector_client.py
+  scripts/contact/laser_distance_relay.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

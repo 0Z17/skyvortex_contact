@@ -14,12 +14,16 @@
   <rosparam file="$(find uav_contact_bringup)/config/servo.yaml" command="load"/>
   <rosparam file="$(find uav_contact_bringup)/config/safety.yaml" command="load"/>
   <rosparam file="$(find uav_contact_bringup)/config/experiment_data_recorder.yaml" command="load"/>
+  <rosparam file="$(find uav_contact_bringup)/config/laser_distance_relay.yaml" command="load"/>
 
   <include if="$(arg start_mavros)" file="$(find mavros)/launch/px4.launch">
     <arg name="fcu_url" value="/dev/ttyACM0:57600"/>
   </include>
 
+  <include file="$(find ldlidar)/launch/stp23l.launch"/>
+
   <group ns="$(arg namespace)">
+    <node pkg="uav_contact_core" type="laser_distance_relay.py" name="laser_distance_relay" output="screen"/>
     <node pkg="uav_contact_core" type="task_manager_node.py" name="task_manager" output="screen"/>
     <node pkg="uav_contact_core" type="trajectory_server_node.py" name="trajectory_server" output="screen"/>
     <node pkg="uav_contact_core" type="dist_pid_controller.py" name="contact_controller" output="screen"/>
@@ -31,6 +35,6 @@
     <node pkg="uav_contact_core" type="joint_servo_gazebo_relay.py" name="joint_servo_gazebo_relay" output="screen"/>
     <node pkg="uav_contact_core" type="safety_monitor_node.py" name="safety_monitor" output="screen"/>
     <node pkg="uav_contact_core" type="experiment_data_recorder_node.py" name="experiment_data_recorder" output="screen"/>
-    <node pkg="uav_contact_core" type="end_effector_client.py" name="end_effector_client" output="screen"/>
+    <node pkg="uav_contact_core" type="end_effector_client.py" name="end_effector_client" output="screen" launch-prefix="xterm -e"/>
   </group>
 </launch>

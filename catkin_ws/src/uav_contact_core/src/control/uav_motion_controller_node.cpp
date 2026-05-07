@@ -41,7 +41,7 @@ UavMotionControllerNode::UavMotionControllerNode()
       task_phase_(uav_contact_msgs::TaskPhase::IDLE),
       safety_unsafe_(false),
       emergency_retreat_required_(false),
-      zero_when_not_offboard_ready_(true),
+      zero_when_not_offboard_ready_(false),
       mavros_connected_(false),
       mavros_armed_(false),
       mavros_offboard_(false),
@@ -203,6 +203,7 @@ std::array<double, 3> UavMotionControllerNode::TangentialTrackingVelocityCommand
 std::array<double, 3> UavMotionControllerNode::FuseVelocityCommand() const {
   const std::array<double, 3> normal = NormalizedNormal();
   const std::array<double, 3> tangential = TangentialTrackingVelocityCommand();
+  
   const double normal_velocity = std::max(
       -max_normal_velocity_, std::min(v_normal_cmd_, max_normal_velocity_));
   return {
