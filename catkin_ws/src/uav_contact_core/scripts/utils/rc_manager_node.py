@@ -51,6 +51,15 @@ def map_pwm_to_three_position(pwm, pwm_min, pwm_mid, pwm_max, deadband, invert=F
     return -value if invert else value
 
 
+def map_pwm_to_magnitude(pwm, pwm_min, pwm_mid, pwm_max, deadband, invert=False):
+    del pwm_mid
+    pwm = clamp(pwm, pwm_min, pwm_max)
+    span = max(float(pwm_max) - float(pwm_min) - max(0.0, float(deadband)), 1.0)
+    value = (pwm - float(pwm_min) - max(0.0, float(deadband))) / span
+    value = clamp(value, 0.0, 1.0)
+    return 1.0 - value if invert else value
+
+
 def param(name, default):
     return rospy.get_param("/rc_manager/{}".format(name), rospy.get_param("~{}".format(name), default))
 
@@ -65,6 +74,8 @@ class RCManagerNode:
         self.axis1_channel = int(param("axis1_channel", 0))
         self.axis2_channel = int(param("axis2_channel", 1))
         self.normal_switch_channel = int(param("normal_switch_channel", 6))
+        self.dynamixel_direction_channel = int(param("dynamixel_direction_channel", 13))
+        self.dynamixel_speed_channel = int(param("dynamixel_speed_channel", 12))
 
         self.pwm_min = int(param("pwm_min", 1044))
         self.pwm_mid = int(param("pwm_mid", 1494))
@@ -74,14 +85,28 @@ class RCManagerNode:
         self.axis1_invert = bool(param("axis1_invert", False))
         self.axis2_invert = bool(param("axis2_invert", False))
         self.normal_switch_invert = bool(param("normal_switch_invert", False))
+        self.dynamixel_direction_invert = bool(param("dynamixel_direction_invert", False))
+        self.dynamixel_speed_invert = bool(param("dynamixel_speed_invert", False))
 
         self.tangent_axis1_topic = param("tangent_axis1_topic", "/uav_contact/rc/tangent_axis1")
         self.tangent_axis2_topic = param("tangent_axis2_topic", "/uav_contact/rc/tangent_axis2")
         self.normal_switch_topic = param("normal_switch_topic", "/uav_contact/rc/normal_switch")
+        self.dynamixel_direction_topic = param(
+            "dynamixel_direction_topic", "/uav_contact/rc/dynamixel_direction"
+        )
+        self.dynamixel_speed_topic = param(
+            "dynamixel_speed_topic", "/uav_contact/rc/dynamixel_speed"
+        )
 
         self.axis1_pub = rospy.Publisher(self.tangent_axis1_topic, Float64, queue_size=10)
         self.axis2_pub = rospy.Publisher(self.tangent_axis2_topic, Float64, queue_size=10)
         self.normal_switch_pub = rospy.Publisher(self.normal_switch_topic, Int8, queue_size=10)
+        self.dynamixel_direction_pub = rospy.Publisher(
+            self.dynamixel_direction_topic, Int8, queue_size=10
+        )
+        self.dynamixel_speed_pub = rospy.Publisher(
+            self.dynamixel_speed_topic, Float64, queue_size=10
+        )
         self.rc_sub = rospy.Subscriber(self.rc_topic, RCIn, self._on_rc, queue_size=10)
 
         rospy.loginfo("RC manager started: %s", self.rc_topic)
@@ -96,6 +121,8 @@ class RCManagerNode:
         axis1_pwm = self._channel(msg, self.axis1_channel)
         axis2_pwm = self._channel(msg, self.axis2_channel)
         switch_pwm = self._channel(msg, self.normal_switch_channel)
+        dxl_direction_pwm = self._channel(msg, self.dynamixel_direction_channel)
+        dxl_speed_pwm = self._channel(msg, self.dynamixel_speed_channel)
 
         axis1 = 0.0 if axis1_pwm is None else map_pwm_to_axis(
             axis1_pwm, self.pwm_min, self.pwm_mid, self.pwm_max,
@@ -109,10 +136,20 @@ class RCManagerNode:
             switch_pwm, self.pwm_min, self.pwm_mid, self.pwm_max,
             self.switch_deadband, self.normal_switch_invert,
         )
+        dxl_direction = 0 if dxl_direction_pwm is None else map_pwm_to_three_position(
+            dxl_direction_pwm, self.pwm_min, self.pwm_mid, self.pwm_max,
+            self.switch_deadband, self.dynamixel_direction_invert,
+        )
+        dxl_speed = 0.0 if dxl_speed_pwm is None else map_pwm_to_magnitude(
+            dxl_speed_pwm, self.pwm_min, self.pwm_mid, self.pwm_max,
+            self.axis_deadband, self.dynamixel_speed_invert,
+        )
 
         self.axis1_pub.publish(Float64(data=axis1))
         self.axis2_pub.publish(Float64(data=axis2))
         self.normal_switch_pub.publish(Int8(data=switch))
+        self.dynamixel_direction_pub.publish(Int8(data=dxl_direction))
+        self.dynamixel_speed_pub.publish(Float64(data=dxl_speed))
 
 
 def main():

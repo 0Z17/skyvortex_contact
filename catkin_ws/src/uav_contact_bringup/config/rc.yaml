@@ -8,15 +8,23 @@ rc_manager:
   axis1_channel: 0
   axis2_channel: 1
   normal_switch_channel: 6
+  dynamixel_direction_channel: 13
+  dynamixel_speed_channel: 12
   axis1_invert: false
   axis2_invert: false
   normal_switch_invert: false
+  dynamixel_direction_invert: false
+  dynamixel_speed_invert: false
   tangent_axis1_topic: "/uav_contact/rc/tangent_axis1"
   tangent_axis2_topic: "/uav_contact/rc/tangent_axis2"
   normal_switch_topic: "/uav_contact/rc/normal_switch"
+  dynamixel_direction_topic: "/uav_contact/rc/dynamixel_direction"
+  dynamixel_speed_topic: "/uav_contact/rc/dynamixel_speed"
 
 rc_to_dynamixel_speed:
-  input_topic: "/uav_contact/rc/tangent_axis2"
+  direction_topic: "/uav_contact/rc/dynamixel_direction"
+  speed_topic: "/uav_contact/rc/dynamixel_speed"
+  joint_pos_topic: "/joint_pos"
   max_speed: 20.0
   deadband: 0.02
   invert: false
