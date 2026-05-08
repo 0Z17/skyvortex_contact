@@ -1,4 +1,7 @@
 contact_controller:
+  rc_enabled: false
+  rc_switch_topic: "/uav_contact/rc/normal_switch"
+  rc_retract_velocity: 0.025
   rate: 50.0
   desired_distance: 0.03
   max_normal_velocity: 0.05

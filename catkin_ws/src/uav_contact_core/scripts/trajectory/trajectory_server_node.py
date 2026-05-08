@@ -73,6 +73,10 @@ class TrajectoryServer:
         approach_time_sec=30.0,
         initial_contact_time_sec=5.0,
         retreat_distance_m=0.5,
+        semi_auto_mode=False,
+        manual_axis1_max_velocity=0.2,
+        manual_axis2_max_velocity=0.2,
+        manual_default_theta=0.0,
     ):
         self.trajectory_publisher = trajectory_publisher
         self.joint_publisher = joint_publisher
@@ -83,6 +87,14 @@ class TrajectoryServer:
         self.approach_time_sec = float(approach_time_sec)
         self.initial_contact_time_sec = float(initial_contact_time_sec)
         self.retreat_distance_m = float(retreat_distance_m)
+        self.semi_auto_mode = bool(semi_auto_mode)
+        self.manual_axis1_max_velocity = float(manual_axis1_max_velocity)
+        self.manual_axis2_max_velocity = float(manual_axis2_max_velocity)
+        self.manual_default_theta = float(manual_default_theta)
+        self.manual_axis1 = 0.0
+        self.manual_axis2 = 0.0
+        self.current_pose = {"x": 0.0, "y": 0.0, "z": 0.0, "psi": 0.0}
+        self.current_theta = self.manual_default_theta
         self.min_approach_speed_mps = 0.15
         self.waypoints = []
         self.waypoint_index = 0
@@ -193,10 +205,73 @@ class TrajectoryServer:
                 psi = float(self.waypoints[0]["psi"])
             else:
                 psi = 0.0
+        self.current_pose = {
+            "x": float(x),
+            "y": float(y),
+            "z": float(z),
+            "psi": float(psi),
+        }
         wp = self._make_waypoint(x=float(x), y=float(y), z=float(z), psi=float(psi), theta=float(theta))
         self._stabilize_start_waypoint = wp
         if self.phase == TaskPhase.STABILIZE:
             self._last_waypoint = wp
+
+    def update_manual_axis1(self, value):
+        self.manual_axis1 = max(min(float(value), 1.0), -1.0)
+
+    def update_manual_axis2(self, value):
+        self.manual_axis2 = max(min(float(value), 1.0), -1.0)
+
+    def update_joint_theta(self, value):
+        self.current_theta = float(value)
+
+    @staticmethod
+    def manual_tangent_basis(yaw, theta):
+        normal = np.array([
+            math.cos(yaw) * math.cos(theta),
+            math.sin(yaw) * math.cos(theta),
+            math.sin(theta),
+        ], dtype=float)
+        tangent_1 = np.array([-math.sin(yaw), math.cos(yaw), 0.0], dtype=float)
+        tangent_2 = np.cross(normal, tangent_1)
+
+        normal = normal / max(np.linalg.norm(normal), 1e-9)
+        tangent_1 = tangent_1 / max(np.linalg.norm(tangent_1), 1e-9)
+        tangent_2 = tangent_2 / max(np.linalg.norm(tangent_2), 1e-9)
+        return normal, tangent_1, tangent_2
+
+    def _publish_manual_reference(self):
+        pose = self.current_pose
+        theta = self.current_theta
+        normal, tangent_1, tangent_2 = self.manual_tangent_basis(pose["psi"], theta)
+        velocity = (
+            self.manual_axis1 * self.manual_axis1_max_velocity * tangent_1
+            + self.manual_axis2 * self.manual_axis2_max_velocity * tangent_2
+        )
+
+        msg = TrajectoryPoint()
+        msg.header.stamp = rospy.Time.now()
+        msg.x = pose["x"]
+        msg.y = pose["y"]
+        msg.z = pose["z"]
+        msg.psi = pose["psi"]
+        msg.theta = theta
+        msg.vx = float(velocity[0])
+        msg.vy = float(velocity[1])
+        msg.vz = float(velocity[2])
+        msg.vpsi = 0.0
+        msg.vtheta = 0.0
+        msg.nx = float(normal[0])
+        msg.ny = float(normal[1])
+        msg.nz = float(normal[2])
+        self.trajectory_publisher.publish(msg)
+        if self.joint_publisher:
+            self.joint_publisher.publish(Float64(data=theta))
+        self._last_waypoint = {
+            "x": msg.x, "y": msg.y, "z": msg.z, "psi": msg.psi, "theta": msg.theta,
+            "vx": msg.vx, "vy": msg.vy, "vz": msg.vz, "vpsi": 0.0, "vtheta": 0.0,
+            "nx": msg.nx, "ny": msg.ny, "nz": msg.nz,
+        }
 
     @staticmethod
     def _normalized(vx, vy, vz):
@@ -532,6 +607,11 @@ class TrajectoryServer:
             self.waypoint_index += 1
 
     def publish(self):
+        if self.semi_auto_mode:
+            if self.phase in (TaskPhase.STABILIZE, TaskPhase.SLIDING_CONTACT):
+                self._publish_manual_reference()
+            return
+
         if not self.waypoints:
             return
 
@@ -600,6 +680,10 @@ def main():
     approach_time_sec = float(rospy.get_param("/trajectory_server/approach_time_sec", 30.0))
     initial_contact_time_sec = float(rospy.get_param("/trajectory_server/initial_contact_time_sec", 5.0))
     retreat_distance_m = float(rospy.get_param("/trajectory_server/retreat_distance_m", 0.5))
+    semi_auto_mode = bool(rospy.get_param("/trajectory_server/semi_auto_mode", False))
+    manual_axis1_topic = rospy.get_param("/rc_manager/tangent_axis1_topic", "/uav_contact/rc/tangent_axis1")
+    manual_axis2_topic = rospy.get_param("/rc_manager/tangent_axis2_topic", "/uav_contact/rc/tangent_axis2")
+    joint_state_topic = rospy.get_param("/topics/joint_state", "/uav_contact/joint/state")
 
     resolved_csv_path = path_csv
     prefix = "$(find uav_contact_core)"
@@ -627,15 +711,22 @@ def main():
         approach_time_sec=approach_time_sec,
         initial_contact_time_sec=initial_contact_time_sec,
         retreat_distance_m=retreat_distance_m,
+        semi_auto_mode=semi_auto_mode,
+        manual_axis1_max_velocity=float(rospy.get_param("/trajectory_server/manual_axis1_max_velocity", 0.2)),
+        manual_axis2_max_velocity=float(rospy.get_param("/trajectory_server/manual_axis2_max_velocity", 0.2)),
+        manual_default_theta=float(rospy.get_param("/trajectory_server/manual_default_theta", 0.0)),
     )
     server.sliding_done_publisher = sliding_done_publisher
 
-    try:
-        waypoints = server.load_csv(resolved_csv_path)
-        server.waypoints = waypoints
-    except (FileNotFoundError, ValueError) as exc:
-        rospy.logerr("Failed to load trajectory CSV: {}".format(exc))
-        return
+    if not semi_auto_mode:
+        try:
+            waypoints = server.load_csv(resolved_csv_path)
+            server.waypoints = waypoints
+        except (FileNotFoundError, ValueError) as exc:
+            rospy.logerr("Failed to load trajectory CSV: {}".format(exc))
+            return
+    else:
+        rospy.loginfo("Trajectory server running in semi-auto RC mode; CSV loading skipped")
 
     def _on_task_phase(msg):
         server.set_phase(msg.phase)
@@ -651,6 +742,10 @@ def main():
 
     rospy.Subscriber("/uav_contact/task/phase", TaskPhase, _on_task_phase, queue_size=10)
     rospy.Subscriber("/mavros/local_position/pose", PoseStamped, _on_local_pose, queue_size=10)
+    if semi_auto_mode:
+        rospy.Subscriber(manual_axis1_topic, Float64, lambda msg: server.update_manual_axis1(msg.data), queue_size=10)
+        rospy.Subscriber(manual_axis2_topic, Float64, lambda msg: server.update_manual_axis2(msg.data), queue_size=10)
+        rospy.Subscriber(joint_state_topic, Float64, lambda msg: server.update_joint_theta(msg.data), queue_size=10)
 
     rate = rospy.Rate(publish_rate_hz)
     rospy.loginfo("Trajectory server started at {} Hz".format(publish_rate_hz))

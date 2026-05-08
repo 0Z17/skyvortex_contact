@@ -162,6 +162,38 @@ def test_sliding_done_transitions_to_retreat():
     assert node.phase == module.TaskPhase.RETREAT
 
 
+def test_semi_auto_stabilize_transitions_directly_to_sliding():
+    module = _load_task_manager_module(
+        {
+            "/task_manager/semi_auto_mode": True,
+            "/task_manager/gate_on_offboard_ready": True,
+            "/task_manager/offboard_ready_hold_sec": 0.5,
+            "/task_manager/stabilize_duration": 0.2,
+        }
+    )
+    node = module.TaskManagerNode()
+
+    node._on_safety_state(module.SafetyState(safe=True, require_emergency_retreat=False, reason=""))
+    module._test_clock["now"] += 0.6
+    node._update_phase()
+    assert node.phase == module.TaskPhase.STABILIZE
+
+    module._test_clock["now"] += 0.3
+    node._update_phase()
+    assert node.phase == module.TaskPhase.SLIDING_CONTACT
+
+
+def test_semi_auto_ignores_sliding_done():
+    module = _load_task_manager_module({"/task_manager/semi_auto_mode": True})
+    node = module.TaskManagerNode()
+    node.phase = module.TaskPhase.SLIDING_CONTACT
+
+    node._on_sliding_done(module.Bool(data=True))
+    node._update_phase()
+
+    assert node.phase == module.TaskPhase.SLIDING_CONTACT
+
+
 def test_emergency_request_forces_emergency_retreat():
     module = _load_task_manager_module()
     node = module.TaskManagerNode()

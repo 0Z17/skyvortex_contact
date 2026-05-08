@@ -6,7 +6,7 @@ def _load_end_effector_module():
     module_path = (
         Path(__file__).resolve().parents[1]
         / "scripts"
-        / "kinematics"
+        / "end_effector"
         / "end_effector_kinematics_node.py"
     )
     spec = importlib.util.spec_from_file_location("end_effector_kinematics_node", module_path)

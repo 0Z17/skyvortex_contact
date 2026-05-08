@@ -34,6 +34,8 @@ catkin_install_python(PROGRAMS
   scripts/actuation/joint_servo_bridge.py
   scripts/actuation/joint_servo_gazebo_relay.py
   scripts/actuation/dynamixel_control.py 
+  scripts/utils/rc_manager_node.py
+  scripts/utils/rc_to_dynamixel_speed.py
   scripts/contact/dist_pid_controller.py
   scripts/contact/experiment_data_recorder_node.py
   scripts/end_effector/end_effector_client.py

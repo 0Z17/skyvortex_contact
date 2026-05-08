@@ -11,6 +11,7 @@ class TaskManagerNode:
 
         self.rate_hz = rospy.get_param("/task_manager/rate", 20.0)
         self.auto_start = rospy.get_param("/task_manager/auto_start", False)
+        self.semi_auto_mode = bool(rospy.get_param("/task_manager/semi_auto_mode", False))
         self.stabilize_duration = rospy.get_param("/task_manager/stabilize_duration", 5.0)
         self.approach_duration = rospy.get_param("/task_manager/approach_duration", 30.0)
         self.initial_contact_duration = rospy.get_param("/task_manager/initial_contact_duration", 5.0)
@@ -103,15 +104,15 @@ class TaskManagerNode:
                 rospy.loginfo("Emergency retreat completed, moving to FINISHED")
             return
 
-        if self.phase == TaskPhase.IDLE and self.auto_start:
+        if self.phase == TaskPhase.IDLE and (self.auto_start or self.semi_auto_mode):
             if self._offboard_ready():
                 self.phase = TaskPhase.STABILIZE
                 self.phase_start_time = rospy.Time.now()
-                rospy.loginfo("Auto-starting: STABILIZE")
+                rospy.loginfo("Starting: STABILIZE")
             return
 
         if self.phase == TaskPhase.SLIDING_CONTACT:
-            if self.sliding_done:
+            if self.sliding_done and not self.semi_auto_mode:
                 self.phase = TaskPhase.RETREAT
                 self.phase_start_time = rospy.Time.now()
                 self.sliding_done = False
@@ -121,7 +122,10 @@ class TaskManagerNode:
         duration = self._phase_duration().get(self.phase)
         elapsed = (rospy.Time.now() - self.phase_start_time).to_sec()
         if duration and elapsed >= duration:
-            next_phase = self._transition_map().get(self.phase)
+            if self.semi_auto_mode and self.phase == TaskPhase.STABILIZE:
+                next_phase = TaskPhase.SLIDING_CONTACT
+            else:
+                next_phase = self._transition_map().get(self.phase)
             if next_phase is not None:
                 if next_phase == TaskPhase.APPROACH and not self._offboard_ready():
                     return

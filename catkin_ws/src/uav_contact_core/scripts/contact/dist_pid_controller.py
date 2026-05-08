@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Int8
 from uav_contact_msgs.msg import TaskPhase, ContactCommand
 
 
@@ -135,6 +135,14 @@ class DistPIDControllerNode:
             rospy.get_param("/contact_controller/normal_velocity_slew_rate", 0.0)
         )
         self.desired_distance = float(rospy.get_param("/contact_controller/desired_distance", 0.03))
+        self.rc_enabled = bool(rospy.get_param("/contact_controller/rc_enabled", False))
+        self.rc_switch_topic = rospy.get_param(
+            "/contact_controller/rc_switch_topic",
+            rospy.get_param("/rc_manager/normal_switch_topic", "/uav_contact/rc/normal_switch"),
+        )
+        self.rc_retract_velocity = float(
+            rospy.get_param("/contact_controller/rc_retract_velocity", self.max_release_velocity)
+        )
         self.enabled_phases = rospy.get_param(
             "/contact_controller/enabled_phases",
             [TaskPhase.INITIAL_CONTACT, TaskPhase.SLIDING_CONTACT],
@@ -156,6 +164,7 @@ class DistPIDControllerNode:
 
         self.phase_enabled = False
         self.distance = 0.0
+        self.rc_switch = 0
 
         self.cmd_pub = rospy.Publisher(
             "/uav_contact/contact/normal_velocity_cmd", ContactCommand, queue_size=10
@@ -167,6 +176,11 @@ class DistPIDControllerNode:
         self.distance_sub = rospy.Subscriber(
             "/contact/distance", Float64, self._on_distance
         )
+        self.rc_switch_sub = None
+        if self.rc_enabled:
+            self.rc_switch_sub = rospy.Subscriber(
+                self.rc_switch_topic, Int8, self._on_rc_switch, queue_size=10
+            )
 
         rospy.loginfo("Dist PID controller started")
 
@@ -179,12 +193,33 @@ class DistPIDControllerNode:
     def _on_distance(self, msg):
         self.distance = msg.data
 
+    def _on_rc_switch(self, msg):
+        self.rc_switch = int(msg.data)
+
+    def _compute_rc_velocity(self):
+        if not self.phase_enabled:
+            self.controller.reset_integral()
+            return 0.0
+        if self.rc_switch > 0:
+            return self.controller.compute(
+                distance=self.distance,
+                desired_distance=self.desired_distance,
+                phase_enabled=True,
+            )
+        self.controller.reset_integral()
+        if self.rc_switch < 0:
+            return -abs(self.rc_retract_velocity)
+        return 0.0
+
     def compute_and_publish(self):
-        v_cmd = self.controller.compute(
-            distance=self.distance,
-            desired_distance=self.desired_distance,
-            phase_enabled=self.phase_enabled,
-        )
+        if self.rc_enabled:
+            v_cmd = self._compute_rc_velocity()
+        else:
+            v_cmd = self.controller.compute(
+                distance=self.distance,
+                desired_distance=self.desired_distance,
+                phase_enabled=self.phase_enabled,
+            )
 
         msg = ContactCommand()
         msg.header.stamp = rospy.Time.now()

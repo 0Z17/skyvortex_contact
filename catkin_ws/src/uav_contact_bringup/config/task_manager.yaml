@@ -1,4 +1,5 @@
 task_manager:
+  semi_auto_mode: false
   rate: 20.0
   auto_start: true
   stabilize_duration: 5.0

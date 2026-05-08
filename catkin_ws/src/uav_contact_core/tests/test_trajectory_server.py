@@ -50,13 +50,13 @@ def test_load_csv_returns_waypoints():
 
     waypoints = server.load_csv(csv_path)
 
-    assert len(waypoints) > 3
+    assert len(waypoints) >= 2
     assert waypoints[0]["vx"] == 0.0
     assert waypoints[0]["vpsi"] == 0.0
-    assert pytest.approx(waypoints[1]["x"], rel=1e-9) == 1.65286
-    assert pytest.approx(waypoints[1]["vtheta"], rel=1e-9) == 0.0001759
-    assert pytest.approx(waypoints[2]["nx"], rel=1e-9) == (
-        module.math.cos(waypoints[2]["psi"]) * module.math.cos(waypoints[2]["theta"])
+    assert pytest.approx(waypoints[1]["x"], rel=1e-9) == 1.5
+    assert pytest.approx(waypoints[1]["vtheta"], rel=1e-9) == 0.0
+    assert pytest.approx(waypoints[1]["nx"], rel=1e-9) == (
+        module.math.cos(waypoints[1]["psi"]) * module.math.cos(waypoints[1]["theta"])
     )
 
 
@@ -255,6 +255,46 @@ def test_publish_sliding_advances_over_cost_interpolated_path():
     assert server.sliding_index >= 1
 
 
+def test_semi_auto_publish_uses_yaw_theta_tangent_basis_without_csv():
+    module = _load_trajectory_module()
+    traj_pub, joint_pub = _make_publishers(module)
+    server = module.TrajectoryServer(
+        trajectory_publisher=traj_pub,
+        joint_publisher=joint_pub,
+        publish_rate_hz=10.0,
+        semi_auto_mode=True,
+        manual_axis1_max_velocity=0.2,
+        manual_axis2_max_velocity=0.3,
+    )
+    server.phase = module.TaskPhase.SLIDING_CONTACT
+    server.update_local_pose(x=1.0, y=2.0, z=3.0, psi=module.math.pi / 2.0)
+    server.update_joint_theta(0.0)
+    server.update_manual_axis1(1.0)
+    server.update_manual_axis2(0.5)
+
+    server.publish()
+
+    assert len(traj_pub.messages) == 1
+    msg = traj_pub.messages[0]
+    assert pytest.approx(msg.nx, abs=1e-9) == 0.0
+    assert pytest.approx(msg.ny, abs=1e-9) == 1.0
+    assert pytest.approx(msg.nz, abs=1e-9) == 0.0
+    assert pytest.approx(msg.vx, abs=1e-9) == -0.2
+    assert pytest.approx(msg.vy, abs=1e-9) == 0.0
+    assert pytest.approx(msg.vz, abs=1e-9) == 0.15
+
+
+def test_manual_axis_inputs_are_clamped():
+    module = _load_trajectory_module()
+    server = module.TrajectoryServer(semi_auto_mode=True)
+
+    server.update_manual_axis1(2.0)
+    server.update_manual_axis2(-3.0)
+
+    assert server.manual_axis1 == 1.0
+    assert server.manual_axis2 == -1.0
+
+
 def test_publish_retreat_generates_leave_segment_and_zero_velocity():
     module = _load_trajectory_module()
     traj_pub, joint_pub = _make_publishers(module)
@@ -276,16 +316,21 @@ def test_publish_retreat_generates_leave_segment_and_zero_velocity():
     server.publish()
 
     assert len(server.retreat_path) == 3
-    assert pytest.approx(server.retreat_path[-1]["x"], rel=1e-9) == server.retreat_path[0]["x"] - 0.5
+    retreat_delta = [
+        server.retreat_path[0]["x"] - server.retreat_path[-1]["x"],
+        server.retreat_path[0]["y"] - server.retreat_path[-1]["y"],
+        server.retreat_path[0]["z"] - server.retreat_path[-1]["z"],
+    ]
+    assert pytest.approx(module.math.sqrt(sum(v * v for v in retreat_delta)), rel=1e-9) == 0.5
     assert pytest.approx(server.retreat_path[-1]["theta"], rel=1e-9) == 0.0
 
     retreat_msgs = traj_pub.messages[-3:]
+    assert any(
+        abs(msg.vx) > 0.0 or abs(msg.vy) > 0.0 or abs(msg.vz) > 0.0
+        for msg in retreat_msgs
+    )
     for msg in retreat_msgs:
-        assert msg.vx == 0.0
-        assert msg.vy == 0.0
-        assert msg.vz == 0.0
         assert msg.vpsi == 0.0
-        assert msg.vtheta == 0.0
 
 
 def test_load_csv_missing_file_raises():

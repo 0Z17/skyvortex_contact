@@ -1,0 +1,28 @@
+rc_manager:
+  rc_topic: "/mavros/rc/in"
+  pwm_min: 1044
+  pwm_mid: 1494
+  pwm_max: 1944
+  axis_deadband: 50
+  switch_deadband: 50
+  axis1_channel: 0
+  axis2_channel: 1
+  normal_switch_channel: 6
+  axis1_invert: false
+  axis2_invert: false
+  normal_switch_invert: false
+  tangent_axis1_topic: "/uav_contact/rc/tangent_axis1"
+  tangent_axis2_topic: "/uav_contact/rc/tangent_axis2"
+  normal_switch_topic: "/uav_contact/rc/normal_switch"
+
+rc_to_dynamixel_speed:
+  input_topic: "/uav_contact/rc/tangent_axis2"
+  max_speed: 20.0
+  deadband: 0.02
+  invert: false
+  publish_rate_hz: 50.0
+  command_timeout_sec: 0.3
+  dxl_id: 1
+  dxl_baudrate: 57600
+  dxl_devicename: "/dev/uav/joint_servo"
+  dxl_operating_mode: 1

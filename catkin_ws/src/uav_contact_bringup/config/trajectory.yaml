@@ -1,4 +1,8 @@
 trajectory_server:
+  semi_auto_mode: false
   path_csv: "$(find uav_contact_core)/data/exp_path.csv"
   publish_rate_hz: 50.0
   retreat_distance_m: 0.5
+  manual_axis1_max_velocity: 0.2
+  manual_axis2_max_velocity: 0.2
+  manual_default_theta: 0.0
