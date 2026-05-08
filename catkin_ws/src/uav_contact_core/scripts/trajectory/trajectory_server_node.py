@@ -117,9 +117,13 @@ class TrajectoryServer:
         waypoints = []
         with path.open("r", newline="") as csv_file:
             reader = csv.DictReader(csv_file)
-            required_columns = {"X", "Y", "Z", "Psi", "Theta"}
-            fieldnames = set(reader.fieldnames or [])
-            missing_columns = sorted(required_columns - fieldnames)
+            required_columns = {"x", "y", "z", "psi", "theta"}
+            column_names = {
+                fieldname.strip().lower(): fieldname
+                for fieldname in (reader.fieldnames or [])
+                if fieldname is not None
+            }
+            missing_columns = sorted(required_columns - set(column_names))
             if missing_columns:
                 raise ValueError(
                     "Missing required CSV columns: {}".format(", ".join(missing_columns))
@@ -129,11 +133,11 @@ class TrajectoryServer:
             for row_index, row in enumerate(reader, start=2):
                 try:
                     waypoint = {
-                        "x": float(row["X"]),
-                        "y": float(row["Y"]),
-                        "z": float(row["Z"]),
-                        "psi": float(row["Psi"]),
-                        "theta": float(row["Theta"]),
+                        "x": float(row[column_names["x"]]),
+                        "y": float(row[column_names["y"]]),
+                        "z": float(row[column_names["z"]]),
+                        "psi": float(row[column_names["psi"]]),
+                        "theta": float(row[column_names["theta"]]),
                     }
                 except (TypeError, ValueError) as exc:
                     raise ValueError(

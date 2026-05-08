@@ -60,6 +60,36 @@ def test_load_csv_returns_waypoints():
     )
 
 
+def test_load_csv_accepts_lowercase_headers(tmp_path):
+    module = _load_trajectory_module()
+    server = module.TrajectoryServer()
+    csv_path = tmp_path / "lowercase.csv"
+    csv_path.write_text("x,y,z,psi,theta\n1,2,3,0.5,0.25\n", encoding="utf-8")
+
+    waypoints = server.load_csv(csv_path)
+
+    assert waypoints[0]["x"] == 1.0
+    assert waypoints[0]["y"] == 2.0
+    assert waypoints[0]["z"] == 3.0
+    assert waypoints[0]["psi"] == 0.5
+    assert waypoints[0]["theta"] == 0.25
+
+
+def test_load_csv_accepts_mixed_case_and_spaced_headers(tmp_path):
+    module = _load_trajectory_module()
+    server = module.TrajectoryServer()
+    csv_path = tmp_path / "mixed_case.csv"
+    csv_path.write_text(" X ,y,Z,psi,THETA\n1,2,3,0.5,0.25\n", encoding="utf-8")
+
+    waypoints = server.load_csv(csv_path)
+
+    assert waypoints[0]["x"] == 1.0
+    assert waypoints[0]["y"] == 2.0
+    assert waypoints[0]["z"] == 3.0
+    assert waypoints[0]["psi"] == 0.5
+    assert waypoints[0]["theta"] == 0.25
+
+
 def test_publish_stabilize_emits_hover_zero_velocity():
     module = _load_trajectory_module()
     traj_pub, joint_pub = _make_publishers(module)
