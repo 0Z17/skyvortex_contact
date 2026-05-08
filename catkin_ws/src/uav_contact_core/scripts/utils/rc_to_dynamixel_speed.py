@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
+import importlib.util
 import os
-import sys
 
 try:
     import rospy
@@ -29,6 +29,18 @@ def param(name, default):
     )
 
 
+def load_dynamixel_controller():
+    module_path = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "actuation", "dynamixel_control.py")
+    )
+    spec = importlib.util.spec_from_file_location("uav_contact_dynamixel_control", module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError("Unable to load dynamixel_control.py from {}".format(module_path))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.DynamixelController
+
+
 class RCToDynamixelSpeedNode:
     def __init__(self):
         if rospy is None:
@@ -44,10 +56,7 @@ class RCToDynamixelSpeedNode:
         self.axis = 0.0
         self.last_command_time = rospy.Time(0)
 
-        actuation_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "actuation"))
-        if actuation_dir not in sys.path:
-            sys.path.insert(0, actuation_dir)
-        from dynamixel_control import DynamixelController
+        DynamixelController = load_dynamixel_controller()
 
         self.controller = DynamixelController(
             dxl_id=int(param("dxl_id", 1)),
