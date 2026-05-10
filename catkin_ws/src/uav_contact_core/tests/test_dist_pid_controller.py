@@ -6,7 +6,9 @@ import types
 import pytest
 
 
-def _load_dist_pid_module():
+def _load_dist_pid_module(param_overrides=None):
+    param_overrides = param_overrides or {}
+
     class _FakeTime:
         @staticmethod
         def now():
@@ -31,7 +33,7 @@ def _load_dist_pid_module():
 
     rospy_stub = types.SimpleNamespace(
         init_node=lambda *args, **kwargs: None,
-        get_param=lambda name, default=None: default,
+        get_param=lambda name, default=None: param_overrides.get(name, default),
         Time=_FakeTime,
         Publisher=_FakePublisher,
         Subscriber=lambda *args, **kwargs: None,
@@ -165,4 +167,27 @@ def test_node_publishes_zero_normal_velocity_when_inhibited():
     assert v_cmd == 0.0
     assert inhibited_msg.normal_velocity == 0.0
     assert inhibited_msg.enabled is False
+    assert node.phase_enabled is True
+
+
+def test_node_recovers_from_inhibit_with_slew_rate():
+    module = _load_dist_pid_module(
+        {
+            "/contact_controller/rate": 10.0,
+            "/contact_controller/normal_velocity_slew_rate": 0.04,
+        }
+    )
+    node = module.DistPIDControllerNode()
+    node.phase_enabled = True
+    node.distance = 0.0
+
+    node._on_normal_velocity_inhibit(module.Bool(data=True))
+    inhibited = node.compute_and_publish()
+    node._on_normal_velocity_inhibit(module.Bool(data=False))
+    first_recovered = node.compute_and_publish()
+    second_recovered = node.compute_and_publish()
+
+    assert inhibited == 0.0
+    assert first_recovered == pytest.approx(0.004)
+    assert second_recovered == pytest.approx(0.008)
     assert node.phase_enabled is True

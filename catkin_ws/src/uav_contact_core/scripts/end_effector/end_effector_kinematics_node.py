@@ -6,7 +6,7 @@ import numpy as np
 try:
     import rospy
     from geometry_msgs.msg import Twist
-    from uav_contact_msgs.msg import TrajectoryPoint
+    from uav_contact_msgs.msg import TaskPhase, TrajectoryPoint
 except ImportError:  # pragma: no cover
     rospy = None
 
@@ -40,6 +40,10 @@ except ImportError:  # pragma: no cover
             self.ny = 0.0
             self.nz = 0.0
 
+    class TaskPhase:
+        APPROACH = 2
+        SLIDING_CONTACT = 4
+
 
 class EndEffectorTwistController:
     def __init__(self, link_length=0.7835, vel_factor=2.0, max_xy_speed=0.4):
@@ -49,6 +53,7 @@ class EndEffectorTwistController:
         self.current_velocity = (0.0, 0.0, 0.0, 0.0, 0.0)
         self.current_config = None
         self.current_normal = (1.0, 0.0, 0.0)
+        self.phase_enabled = False
 
     def update_trajectory_reference(self, msg):
         self.current_config = (
@@ -66,6 +71,9 @@ class EndEffectorTwistController:
             float(msg.vtheta),
         )
         self.current_normal = (float(msg.nx), float(msg.ny), float(msg.nz))
+
+    def set_phase_enabled(self, enabled):
+        self.phase_enabled = bool(enabled)
 
     def _jacobian(self, config):
         psi = config[3]
@@ -89,7 +97,7 @@ class EndEffectorTwistController:
 
     def compute_twist(self):
         msg = Twist()
-        if self.current_config is None:
+        if not self.phase_enabled or self.current_config is None:
             return msg
 
         vel_vec = np.array(self.current_velocity, dtype=float)
@@ -132,6 +140,12 @@ def main():
     def _trajectory_ref_callback(msg):
         controller.update_trajectory_reference(msg)
 
+    def _task_phase_callback(msg):
+        controller.set_phase_enabled(
+            msg.phase in (TaskPhase.APPROACH, TaskPhase.SLIDING_CONTACT)
+        )
+
+    rospy.Subscriber("/uav_contact/task/phase", TaskPhase, _task_phase_callback, queue_size=10)
     rospy.Subscriber("/uav_contact/trajectory/reference", TrajectoryPoint, _trajectory_ref_callback, queue_size=10)
 
     rate = rospy.Rate(publish_rate_hz)

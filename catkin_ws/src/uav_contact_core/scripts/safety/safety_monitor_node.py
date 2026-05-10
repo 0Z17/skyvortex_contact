@@ -42,6 +42,9 @@ class SafetyMonitorNode:
         self.rc_out_clear_threshold = int(
             rospy.get_param("/safety_monitor/rc_out_clear_threshold", self.rc_out_threshold)
         )
+        self.rc_out_release_hold_sec = max(
+            0.0, float(rospy.get_param("/safety_monitor/rc_out_release_hold_sec", 0.2))
+        )
         self.rc_out_channels = rospy.get_param("/safety_monitor/rc_out_channels", [])
 
         self.last_imu_time = rospy.Time(0)
@@ -59,6 +62,7 @@ class SafetyMonitorNode:
         self.current_rc_out_channels = []
         self.high_rc_out_channels = []
         self.normal_velocity_inhibited = False
+        self.rc_out_clear_started_time = None
         self.mavros_connected = False
         self.mavros_mode = ""
         self.mavros_armed = False
@@ -127,6 +131,7 @@ class SafetyMonitorNode:
         self.high_motor_outputs = high_outputs
 
     def _on_rc_out(self, msg):
+        now = rospy.Time.now()
         self.current_rc_out_channels = [int(value) for value in msg.channels]
 
         if self.rc_out_channels:
@@ -147,8 +152,22 @@ class SafetyMonitorNode:
         self.high_rc_out_channels = high_channels
         if high_channels:
             self.normal_velocity_inhibited = True
+            self.rc_out_clear_started_time = None
+        elif not valid_values:
+            self.rc_out_clear_started_time = None
         elif valid_values and all(value <= self.rc_out_clear_threshold for value in valid_values):
-            self.normal_velocity_inhibited = False
+            if not self.normal_velocity_inhibited:
+                self.rc_out_clear_started_time = None
+            elif self.rc_out_release_hold_sec <= 0.0:
+                self.normal_velocity_inhibited = False
+                self.rc_out_clear_started_time = None
+            elif self.rc_out_clear_started_time is None:
+                self.rc_out_clear_started_time = now
+            elif (now - self.rc_out_clear_started_time).to_sec() >= self.rc_out_release_hold_sec:
+                self.normal_velocity_inhibited = False
+                self.rc_out_clear_started_time = None
+        else:
+            self.rc_out_clear_started_time = None
 
         if self.normal_velocity_inhibited:
             rospy.logwarn_throttle(1.0, self._rc_out_inhibit_reason())

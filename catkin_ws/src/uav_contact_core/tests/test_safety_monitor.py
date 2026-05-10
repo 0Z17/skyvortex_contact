@@ -140,8 +140,10 @@ def test_rc_out_inhibits_normal_velocity_without_marking_safety_unsafe():
     node.mavros_connected = True
     node.enable_rc_out_normal_velocity_inhibit = True
     node.rc_out_threshold = 1820
-    node.rc_out_clear_threshold = 1820
+    node.rc_out_clear_threshold = 1800
+    node.rc_out_release_hold_sec = 0.2
 
+    type(module.rospy.Time).now_sec = 10.0
     node._on_rc_out(types.SimpleNamespace(channels=[1100, 1821, 1500]))
 
     state, safe, emergency, reason = node.evaluate()
@@ -152,7 +154,25 @@ def test_rc_out_inhibits_normal_velocity_without_marking_safety_unsafe():
     assert state == module.SafetyState.NORMAL
     assert reason == "NORMAL"
 
-    node._on_rc_out(types.SimpleNamespace(channels=[1100, 1820, 1500]))
+    type(module.rospy.Time).now_sec = 10.1
+    node._on_rc_out(types.SimpleNamespace(channels=[1100, 1810, 1500]))
+
+    assert node.normal_velocity_inhibited is True
+    assert node.rc_out_clear_started_time is None
+
+    type(module.rospy.Time).now_sec = 10.2
+    node._on_rc_out(types.SimpleNamespace(channels=[1100, 1800, 1500]))
+
+    assert node.normal_velocity_inhibited is True
+    assert node.rc_out_clear_started_time is not None
+
+    type(module.rospy.Time).now_sec = 10.35
+    node._on_rc_out(types.SimpleNamespace(channels=[1100, 1800, 1500]))
+
+    assert node.normal_velocity_inhibited is True
+
+    type(module.rospy.Time).now_sec = 10.41
+    node._on_rc_out(types.SimpleNamespace(channels=[1100, 1800, 1500]))
 
     assert node.normal_velocity_inhibited is False
 
