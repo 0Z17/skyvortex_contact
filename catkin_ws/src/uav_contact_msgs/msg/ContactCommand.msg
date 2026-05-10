@@ -1,7 +1,6 @@
 std_msgs/Header header
 
 bool enabled
-geometry_msgs/Vector3 normal_direction
 float64 normal_velocity
 float64 normal_offset
 float64 distance_error
