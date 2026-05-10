@@ -92,3 +92,13 @@ def test_cpp_has_tangential_position_feedback_term():
     assert "p_ref_" in content and "p_meas_" in content
     assert "p_error_tangent" in content
     assert "\"/mavros/local_position/pose\"" in content
+
+
+def test_cpp_uses_position_setpoint_for_retreat():
+    content = _controller_cpp_path().read_text(encoding="utf-8")
+    assert "retreat_distance_m_(0.3)" in content
+    assert '"/trajectory_server/retreat_distance_m"' in content
+    assert "CaptureRetreatPositionTarget()" in content
+    assert "PublishRetreatPositionSetpoint(now)" in content
+    assert "start[0] - retreat_distance * normal[0]" in content
+    assert "msg.type_mask = kPositionOnlyTypeMask;" in content

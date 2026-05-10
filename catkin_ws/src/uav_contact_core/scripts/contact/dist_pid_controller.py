@@ -209,9 +209,6 @@ class DistPIDControllerNode:
         msg = ContactCommand()
         msg.header.stamp = rospy.Time.now()
         msg.enabled = self.phase_enabled and not self.normal_velocity_inhibited
-        msg.normal_direction.x = 1.0
-        msg.normal_direction.y = 0.0
-        msg.normal_direction.z = 0.0
         msg.normal_velocity = v_cmd
         msg.normal_offset = 0.0
         msg.distance_error = self.controller.prev_error if self.controller.prev_error else 0.0

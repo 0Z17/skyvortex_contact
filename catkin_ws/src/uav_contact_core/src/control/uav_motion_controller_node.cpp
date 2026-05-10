@@ -35,8 +35,10 @@ UavMotionControllerNode::UavMotionControllerNode()
       p_ref_{0.0, 0.0, 0.0},
       p_meas_{0.0, 0.0, 0.0},
       n_{1.0, 0.0, 0.0},
+      retreat_position_target_{0.0, 0.0, 0.0},
       psi_ref_(0.0),
       vpsi_ref_(0.0),
+      retreat_yaw_ref_(0.0),
       v_normal_cmd_(0.0),
       task_phase_(uav_contact_msgs::TaskPhase::IDLE),
       safety_unsafe_(false),
@@ -49,7 +51,7 @@ UavMotionControllerNode::UavMotionControllerNode()
       max_normal_velocity_(kDefaultMaxNormalVelocity),
       max_tangent_velocity_(kDefaultMaxTangentVelocity),
       tangent_position_kp_(1.0),
-      retreat_normal_velocity_(0.03),
+      retreat_distance_m_(0.3),
       publish_rate_hz_(kDefaultPublishRateHz),
       input_timeout_sec_(0.5),
       approach_use_position_mode_(true),
@@ -57,6 +59,7 @@ UavMotionControllerNode::UavMotionControllerNode()
       has_velocity_ref_(false),
       has_pose_ref_(false),
       has_pose_meas_(false),
+      has_retreat_position_target_(false),
       has_velocity_normal_cmd_(false),
       has_task_phase_(false),
       has_safety_state_(false),
@@ -68,7 +71,8 @@ UavMotionControllerNode::UavMotionControllerNode()
   pnh_.param("max_normal_velocity", max_normal_velocity_, max_normal_velocity_);
   pnh_.param("max_tangent_velocity", max_tangent_velocity_, max_tangent_velocity_);
   pnh_.param("tangent_position_kp", tangent_position_kp_, tangent_position_kp_);
-  pnh_.param("retreat_normal_velocity", retreat_normal_velocity_, retreat_normal_velocity_);
+  nh_.param("/trajectory_server/retreat_distance_m", retreat_distance_m_,
+            retreat_distance_m_);
   pnh_.param("publish_rate_hz", publish_rate_hz_, publish_rate_hz_);
   pnh_.param("input_timeout_sec", input_timeout_sec_, input_timeout_sec_);
   pnh_.param("zero_when_not_offboard_ready", zero_when_not_offboard_ready_,
@@ -135,6 +139,13 @@ void UavMotionControllerNode::ContactCommandCallback(
 
 void UavMotionControllerNode::TaskPhaseCallback(
     const uav_contact_msgs::TaskPhase::ConstPtr& msg) {
+  if (msg->phase == uav_contact_msgs::TaskPhase::RETREAT &&
+      task_phase_ != uav_contact_msgs::TaskPhase::RETREAT) {
+    CaptureRetreatPositionTarget();
+  } else if (msg->phase != uav_contact_msgs::TaskPhase::RETREAT) {
+    has_retreat_position_target_ = false;
+  }
+
   task_phase_ = msg->phase;
   has_task_phase_ = true;
   last_task_phase_time_ = ros::Time::now();
@@ -213,18 +224,6 @@ std::array<double, 3> UavMotionControllerNode::FuseVelocityCommand() const {
   };
 }
 
-std::array<double, 3> UavMotionControllerNode::RetreatVelocityCommand() const {
-  const std::array<double, 3> normal = NormalizedNormal();
-  const std::array<double, 3> tangential = TangentialTrackingVelocityCommand();
-  const double normal_velocity = -std::min(
-      std::fabs(retreat_normal_velocity_), max_normal_velocity_);
-  return {
-      tangential[0] + normal_velocity * normal[0],
-      tangential[1] + normal_velocity * normal[1],
-      tangential[2] + normal_velocity * normal[2],
-  };
-}
-
 std::array<double, 3> UavMotionControllerNode::ClampNorm(
     const std::array<double, 3>& v, double limit) const {
   const double norm = std::sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
@@ -267,6 +266,43 @@ void UavMotionControllerNode::PublishApproachPositionSetpoint(
   msg.velocity.y = 0.0;
   msg.velocity.z = 0.0;
   msg.yaw = psi_ref_;
+  msg.yaw_rate = 0.0;
+
+  setpoint_pub_.publish(msg);
+}
+
+void UavMotionControllerNode::CaptureRetreatPositionTarget() {
+  if (!has_pose_meas_ && !has_pose_ref_) {
+    has_retreat_position_target_ = false;
+    ROS_WARN_THROTTLE(1.0, "RETREAT requested before any pose is available");
+    return;
+  }
+
+  const std::array<double, 3> start = has_pose_meas_ ? p_meas_ : p_ref_;
+  const std::array<double, 3> normal = NormalizedNormal();
+  const double retreat_distance = std::max(0.0, retreat_distance_m_);
+  retreat_position_target_ = {
+      start[0] - retreat_distance * normal[0],
+      start[1] - retreat_distance * normal[1],
+      start[2] - retreat_distance * normal[2],
+  };
+  retreat_yaw_ref_ = psi_ref_;
+  has_retreat_position_target_ = true;
+}
+
+void UavMotionControllerNode::PublishRetreatPositionSetpoint(
+    const ros::Time& stamp) {
+  mavros_msgs::PositionTarget msg;
+  msg.header.stamp = stamp;
+  msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
+  msg.type_mask = kPositionOnlyTypeMask;
+  msg.position.x = retreat_position_target_[0];
+  msg.position.y = retreat_position_target_[1];
+  msg.position.z = retreat_position_target_[2];
+  msg.velocity.x = 0.0;
+  msg.velocity.y = 0.0;
+  msg.velocity.z = 0.0;
+  msg.yaw = retreat_yaw_ref_;
   msg.yaw_rate = 0.0;
 
   setpoint_pub_.publish(msg);
@@ -342,11 +378,12 @@ void UavMotionControllerNode::PublishSetpoint() {
       break;
     }
     case uav_contact_msgs::TaskPhase::RETREAT: {
-      const bool velocity_ref_fresh =
-          has_velocity_ref_ &&
-          ((now - last_velocity_ref_time_).toSec() <= input_timeout_sec_);
-      if (velocity_ref_fresh) {
-        clamped = ClampNorm(RetreatVelocityCommand(), max_velocity_);
+      if (!should_override && !has_retreat_position_target_) {
+        CaptureRetreatPositionTarget();
+      }
+      if (!should_override && has_retreat_position_target_) {
+        PublishRetreatPositionSetpoint(now);
+        return;
       }
       break;
     }

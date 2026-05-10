@@ -28,7 +28,6 @@ def _load_dist_pid_module():
     class _ContactCommand:
         def __init__(self):
             self.header = types.SimpleNamespace(stamp=None)
-            self.normal_direction = types.SimpleNamespace(x=0.0, y=0.0, z=0.0)
 
     rospy_stub = types.SimpleNamespace(
         init_node=lambda *args, **kwargs: None,

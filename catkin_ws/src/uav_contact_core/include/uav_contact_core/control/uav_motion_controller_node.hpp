@@ -27,9 +27,10 @@ class UavMotionControllerNode {
   void LocalPoseCallback(const geometry_msgs::PoseStamped::ConstPtr& msg);
   void PublishSetpoint();
   void PublishApproachPositionSetpoint(const ros::Time& stamp);
+  void CaptureRetreatPositionTarget();
+  void PublishRetreatPositionSetpoint(const ros::Time& stamp);
 
   std::array<double, 3> FuseVelocityCommand() const;
-  std::array<double, 3> RetreatVelocityCommand() const;
   std::array<double, 3> TangentialTrackingVelocityCommand() const;
   std::array<double, 3> NormalizedNormal() const;
   std::array<double, 3> TangentialComponent(const std::array<double, 3>& v) const;
@@ -51,8 +52,10 @@ class UavMotionControllerNode {
   std::array<double, 3> p_ref_;
   std::array<double, 3> p_meas_;
   std::array<double, 3> n_;
+  std::array<double, 3> retreat_position_target_;
   double psi_ref_;
   double vpsi_ref_;
+  double retreat_yaw_ref_;
   double v_normal_cmd_;
   uint8_t task_phase_;
   bool safety_unsafe_;
@@ -66,7 +69,7 @@ class UavMotionControllerNode {
   double max_normal_velocity_;
   double max_tangent_velocity_;
   double tangent_position_kp_;
-  double retreat_normal_velocity_;
+  double retreat_distance_m_;
   double publish_rate_hz_;
   double input_timeout_sec_;
   bool approach_use_position_mode_;
@@ -75,6 +78,7 @@ class UavMotionControllerNode {
   bool has_velocity_ref_;
   bool has_pose_ref_;
   bool has_pose_meas_;
+  bool has_retreat_position_target_;
   bool has_velocity_normal_cmd_;
   bool has_task_phase_;
   bool has_safety_state_;
