@@ -60,8 +60,13 @@ def _load_safety_module():
     sys.modules["rospy"] = rospy_stub
     sys.modules["geometry_msgs.msg"] = types.SimpleNamespace(PoseStamped=object, Vector3=object)
     sys.modules["sensor_msgs.msg"] = types.SimpleNamespace(Imu=object)
-    sys.modules["mavros_msgs.msg"] = types.SimpleNamespace(ActuatorControl=object, State=object)
-    sys.modules["std_msgs.msg"] = types.SimpleNamespace(Float64=object)
+    sys.modules["mavros_msgs.msg"] = types.SimpleNamespace(
+        ActuatorControl=object, RCOut=object, State=object
+    )
+    sys.modules["std_msgs.msg"] = types.SimpleNamespace(
+        Bool=lambda data=False: types.SimpleNamespace(data=data),
+        Float64=object,
+    )
     sys.modules["uav_contact_msgs.msg"] = types.SimpleNamespace(SafetyState=_SafetyState, TaskPhase=_TaskPhase)
 
     module_path = (
@@ -125,6 +130,31 @@ def test_motor_output_warning_keeps_state_safe():
     assert emergency is False
     assert state == module.SafetyState.NORMAL
     assert "MOTOR_OUTPUT_HIGH" in reason
+
+
+def test_rc_out_inhibits_normal_velocity_without_marking_safety_unsafe():
+    module = _load_safety_module()
+    node = module.SafetyMonitorNode()
+    node.require_offboard = False
+    node.require_armed = False
+    node.mavros_connected = True
+    node.enable_rc_out_normal_velocity_inhibit = True
+    node.rc_out_threshold = 1820
+    node.rc_out_clear_threshold = 1820
+
+    node._on_rc_out(types.SimpleNamespace(channels=[1100, 1821, 1500]))
+
+    state, safe, emergency, reason = node.evaluate()
+
+    assert node.normal_velocity_inhibited is True
+    assert safe is True
+    assert emergency is False
+    assert state == module.SafetyState.NORMAL
+    assert reason == "NORMAL"
+
+    node._on_rc_out(types.SimpleNamespace(channels=[1100, 1820, 1500]))
+
+    assert node.normal_velocity_inhibited is False
 
 
 def test_contact_loss_is_warning_not_hard_stop():
