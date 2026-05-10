@@ -3,7 +3,7 @@ task_manager:
   auto_start: true
   stabilize_duration: 5.0
   approach_duration: 30.0
-  initial_contact_duration: 5.0
+  initial_contact_duration: 120.0
   retreat_duration: 20.0
   gate_on_offboard_ready: true
   offboard_ready_hold_sec: 0.5

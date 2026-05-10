@@ -99,7 +99,8 @@ class TrajectoryServer:
         self.initial_contact_index = 0
         self.initial_contact_active = False
 
-        self.cost_res = 0.0005
+        # self.cost_res = 0.0005
+        self.cost_res = 0.00025
         self.sliding_path = []
         self.sliding_index = 0
         self.sliding_active = False

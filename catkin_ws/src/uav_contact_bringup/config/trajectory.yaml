@@ -1,4 +1,5 @@
 trajectory_server:
-  path_csv: "$(find uav_contact_core)/data/exp_path.csv"
+  # path_csv: "$(find uav_contact_core)/data/exp_path.csv"
+  path_csv: "/home/nvidia/zzx_ws/test/path/exp_path.csv"
   publish_rate_hz: 50.0
   retreat_distance_m: 0.5

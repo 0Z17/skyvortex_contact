@@ -41,7 +41,7 @@ UavMotionControllerNode::UavMotionControllerNode()
       task_phase_(uav_contact_msgs::TaskPhase::IDLE),
       safety_unsafe_(false),
       emergency_retreat_required_(false),
-      zero_when_not_offboard_ready_(false),
+      zero_when_not_offboard_ready_(true),
       mavros_connected_(false),
       mavros_armed_(false),
       mavros_offboard_(false),
