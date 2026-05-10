@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import rospy
-from std_msgs.msg import Float64
+from std_msgs.msg import Bool, Float64
 from uav_contact_msgs.msg import TaskPhase, ContactCommand
 
 
@@ -139,6 +139,12 @@ class DistPIDControllerNode:
             "/contact_controller/enabled_phases",
             [TaskPhase.INITIAL_CONTACT, TaskPhase.SLIDING_CONTACT],
         )
+        self.normal_velocity_inhibit_topic = str(
+            rospy.get_param(
+                "/contact_controller/normal_velocity_inhibit_topic",
+                "/uav_contact/safety/normal_velocity_inhibit",
+            )
+        )
 
         dt = 1.0 / max(self.rate_hz, 1.0)
         self.controller = DistPIDController(
@@ -155,6 +161,7 @@ class DistPIDControllerNode:
         )
 
         self.phase_enabled = False
+        self.normal_velocity_inhibited = False
         self.distance = 0.0
 
         self.cmd_pub = rospy.Publisher(
@@ -166,6 +173,9 @@ class DistPIDControllerNode:
         )
         self.distance_sub = rospy.Subscriber(
             "/contact/distance", Float64, self._on_distance
+        )
+        self.normal_velocity_inhibit_sub = rospy.Subscriber(
+            self.normal_velocity_inhibit_topic, Bool, self._on_normal_velocity_inhibit
         )
 
         rospy.loginfo("Dist PID controller started")
@@ -179,16 +189,26 @@ class DistPIDControllerNode:
     def _on_distance(self, msg):
         self.distance = msg.data
 
+    def _on_normal_velocity_inhibit(self, msg):
+        inhibited = bool(msg.data)
+        if inhibited and not self.normal_velocity_inhibited:
+            self.controller.reset_integral()
+        self.normal_velocity_inhibited = inhibited
+
     def compute_and_publish(self):
-        v_cmd = self.controller.compute(
-            distance=self.distance,
-            desired_distance=self.desired_distance,
-            phase_enabled=self.phase_enabled,
-        )
+        if self.normal_velocity_inhibited:
+            self.controller.reset_integral()
+            v_cmd = 0.0
+        else:
+            v_cmd = self.controller.compute(
+                distance=self.distance,
+                desired_distance=self.desired_distance,
+                phase_enabled=self.phase_enabled,
+            )
 
         msg = ContactCommand()
         msg.header.stamp = rospy.Time.now()
-        msg.enabled = self.phase_enabled
+        msg.enabled = self.phase_enabled and not self.normal_velocity_inhibited
         msg.normal_direction.x = 1.0
         msg.normal_direction.y = 0.0
         msg.normal_direction.z = 0.0

@@ -3,8 +3,8 @@
 import math
 import rospy
 from geometry_msgs.msg import PoseStamped
-from mavros_msgs.msg import ActuatorControl, State as MavrosState
-from std_msgs.msg import Float64
+from mavros_msgs.msg import ActuatorControl, RCOut, State as MavrosState
+from std_msgs.msg import Bool, Float64
 from uav_contact_msgs.msg import SafetyState, TaskPhase
 
 
@@ -34,6 +34,15 @@ class SafetyMonitorNode:
             rospy.get_param("/safety_monitor/motor_output_warning_threshold", 0.85)
         )
         self.motor_output_indices = rospy.get_param("/safety_monitor/motor_output_indices", [])
+        self.enable_rc_out_normal_velocity_inhibit = bool(
+            rospy.get_param("/safety_monitor/enable_rc_out_normal_velocity_inhibit", False)
+        )
+        self.rc_out_topic = str(rospy.get_param("/safety_monitor/rc_out_topic", "/mavros/rc/out"))
+        self.rc_out_threshold = int(rospy.get_param("/safety_monitor/rc_out_threshold", 1820))
+        self.rc_out_clear_threshold = int(
+            rospy.get_param("/safety_monitor/rc_out_clear_threshold", self.rc_out_threshold)
+        )
+        self.rc_out_channels = rospy.get_param("/safety_monitor/rc_out_channels", [])
 
         self.last_imu_time = rospy.Time(0)
         self.last_mavros_state_time = rospy.Time(0)
@@ -47,12 +56,18 @@ class SafetyMonitorNode:
         self.prev_distance = None
         self.current_motor_outputs = []
         self.high_motor_outputs = []
+        self.current_rc_out_channels = []
+        self.high_rc_out_channels = []
+        self.normal_velocity_inhibited = False
         self.mavros_connected = False
         self.mavros_mode = ""
         self.mavros_armed = False
         self.current_phase = TaskPhase.IDLE
 
         self.state_pub = rospy.Publisher("/uav_contact/safety/state", SafetyState, queue_size=10)
+        self.normal_velocity_inhibit_pub = rospy.Publisher(
+            "/uav_contact/safety/normal_velocity_inhibit", Bool, queue_size=10
+        )
 
         rospy.Subscriber("/mavros/local_position/pose", PoseStamped, self._on_pose, queue_size=10)
         rospy.Subscriber("/mavros/state", MavrosState, self._on_mavros_state, queue_size=10)
@@ -60,6 +75,8 @@ class SafetyMonitorNode:
         rospy.Subscriber("/uav_contact/task/phase", TaskPhase, self._on_task_phase, queue_size=10)
         if self.enable_motor_output_warning:
             rospy.Subscriber(self.motor_output_topic, ActuatorControl, self._on_motor_output, queue_size=10)
+        if self.enable_rc_out_normal_velocity_inhibit:
+            rospy.Subscriber(self.rc_out_topic, RCOut, self._on_rc_out, queue_size=10)
 
         rospy.loginfo("Safety monitor node started")
 
@@ -109,6 +126,33 @@ class SafetyMonitorNode:
                 high_outputs.append((index, normalized))
         self.high_motor_outputs = high_outputs
 
+    def _on_rc_out(self, msg):
+        self.current_rc_out_channels = [int(value) for value in msg.channels]
+
+        if self.rc_out_channels:
+            candidate_indices = [int(index) for index in self.rc_out_channels]
+        else:
+            candidate_indices = list(range(len(self.current_rc_out_channels)))
+
+        high_channels = []
+        valid_values = []
+        for index in candidate_indices:
+            if index < 0 or index >= len(self.current_rc_out_channels):
+                continue
+            value = self.current_rc_out_channels[index]
+            valid_values.append(value)
+            if value > self.rc_out_threshold:
+                high_channels.append((index, value))
+
+        self.high_rc_out_channels = high_channels
+        if high_channels:
+            self.normal_velocity_inhibited = True
+        elif valid_values and all(value <= self.rc_out_clear_threshold for value in valid_values):
+            self.normal_velocity_inhibited = False
+
+        if self.normal_velocity_inhibited:
+            rospy.logwarn_throttle(1.0, self._rc_out_inhibit_reason())
+
     def _motor_output_warning_reason(self):
         if not self.high_motor_outputs:
             return ""
@@ -118,6 +162,17 @@ class SafetyMonitorNode:
         )
         return "MOTOR_OUTPUT_HIGH {} threshold={:.2f}".format(
             details, self.motor_output_warning_threshold
+        )
+
+    def _rc_out_inhibit_reason(self):
+        if not self.high_rc_out_channels:
+            return "RC_OUT_NORMAL_VELOCITY_INHIBIT threshold={}".format(self.rc_out_threshold)
+        details = " ".join(
+            "ch{}={}".format(index, value)
+            for index, value in self.high_rc_out_channels
+        )
+        return "RC_OUT_NORMAL_VELOCITY_INHIBIT {} threshold={}".format(
+            details, self.rc_out_threshold
         )
 
     def evaluate(self):
@@ -211,6 +266,7 @@ class SafetyMonitorNode:
             msg.require_emergency_retreat = require_emergency
             msg.reason = reason
             self.state_pub.publish(msg)
+            self.normal_velocity_inhibit_pub.publish(Bool(data=self.normal_velocity_inhibited))
 
             rate.sleep()
 
