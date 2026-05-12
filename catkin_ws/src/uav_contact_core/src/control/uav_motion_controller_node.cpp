@@ -53,6 +53,7 @@ UavMotionControllerNode::UavMotionControllerNode()
       tangent_position_kp_(1.0),
       retreat_distance_m_(0.3),
       retreat_start_max_deviation_m_(0.3),
+      retreat_max_position_deviation_m_(0.3),
       publish_rate_hz_(kDefaultPublishRateHz),
       input_timeout_sec_(0.5),
       approach_use_position_mode_(true),
@@ -77,6 +78,9 @@ UavMotionControllerNode::UavMotionControllerNode()
   pnh_.param("retreat_start_max_deviation_m",
              retreat_start_max_deviation_m_,
              retreat_start_max_deviation_m_);
+  pnh_.param("retreat_max_position_deviation_m",
+             retreat_max_position_deviation_m_,
+             retreat_max_position_deviation_m_);
   pnh_.param("publish_rate_hz", publish_rate_hz_, publish_rate_hz_);
   pnh_.param("input_timeout_sec", input_timeout_sec_, input_timeout_sec_);
   pnh_.param("zero_when_not_offboard_ready", zero_when_not_offboard_ready_,
@@ -239,25 +243,36 @@ std::array<double, 3> UavMotionControllerNode::ClampNorm(
   return {v[0] * scale, v[1] * scale, v[2] * scale};
 }
 
-void UavMotionControllerNode::PublishApproachPositionSetpoint(
-    const ros::Time& stamp) {
-  std::array<double, 3> target = p_ref_;
+std::array<double, 3> UavMotionControllerNode::LimitPositionTarget(
+    const std::array<double, 3>& target, double max_deviation) const {
+  const double limit = std::max(0.0, max_deviation);
+  if (!has_pose_meas_ || limit <= 0.0) {
+    return target;
+  }
+
   const std::array<double, 3> delta = {
-      p_ref_[0] - p_meas_[0],
-      p_ref_[1] - p_meas_[1],
-      p_ref_[2] - p_meas_[2],
+      target[0] - p_meas_[0],
+      target[1] - p_meas_[1],
+      target[2] - p_meas_[2],
   };
   const double distance =
       std::sqrt(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]);
-  const double max_deviation = std::max(0.0, approach_max_position_deviation_);
-  if (max_deviation > 0.0 && distance > max_deviation) {
-    const double scale = max_deviation / distance;
-    target = {
-        p_meas_[0] + delta[0] * scale,
-        p_meas_[1] + delta[1] * scale,
-        p_meas_[2] + delta[2] * scale,
-    };
+  if (distance <= limit || distance <= 0.0) {
+    return target;
   }
+
+  const double scale = limit / distance;
+  return {
+      p_meas_[0] + delta[0] * scale,
+      p_meas_[1] + delta[1] * scale,
+      p_meas_[2] + delta[2] * scale,
+  };
+}
+
+void UavMotionControllerNode::PublishApproachPositionSetpoint(
+    const ros::Time& stamp) {
+  const std::array<double, 3> target =
+      LimitPositionTarget(p_ref_, approach_max_position_deviation_);
 
   mavros_msgs::PositionTarget msg;
   msg.header.stamp = stamp;
@@ -318,13 +333,17 @@ void UavMotionControllerNode::CaptureRetreatPositionTarget() {
 
 void UavMotionControllerNode::PublishRetreatPositionSetpoint(
     const ros::Time& stamp) {
+  const std::array<double, 3> target =
+      LimitPositionTarget(retreat_position_target_,
+                          retreat_max_position_deviation_m_);
+
   mavros_msgs::PositionTarget msg;
   msg.header.stamp = stamp;
   msg.coordinate_frame = mavros_msgs::PositionTarget::FRAME_LOCAL_NED;
   msg.type_mask = kPositionOnlyTypeMask;
-  msg.position.x = retreat_position_target_[0];
-  msg.position.y = retreat_position_target_[1];
-  msg.position.z = retreat_position_target_[2];
+  msg.position.x = target[0];
+  msg.position.y = target[1];
+  msg.position.z = target[2];
   msg.velocity.x = 0.0;
   msg.velocity.y = 0.0;
   msg.velocity.z = 0.0;

@@ -3,6 +3,7 @@ max_normal_velocity: 0.08
 max_tangent_velocity: 0.25
 tangent_position_kp: 1.0
 retreat_start_max_deviation_m: 0.3
+retreat_max_position_deviation_m: 0.3
 publish_rate_hz: 50.0
 input_timeout_sec: 0.5
 zero_when_not_offboard_ready: false

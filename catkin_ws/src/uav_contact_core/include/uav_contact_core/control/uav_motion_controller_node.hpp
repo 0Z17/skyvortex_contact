@@ -35,6 +35,8 @@ class UavMotionControllerNode {
   std::array<double, 3> NormalizedNormal() const;
   std::array<double, 3> TangentialComponent(const std::array<double, 3>& v) const;
   std::array<double, 3> ClampNorm(const std::array<double, 3>& v, double limit) const;
+  std::array<double, 3> LimitPositionTarget(
+      const std::array<double, 3>& target, double max_deviation) const;
 
   ros::NodeHandle nh_;
   ros::NodeHandle pnh_;
@@ -71,6 +73,7 @@ class UavMotionControllerNode {
   double tangent_position_kp_;
   double retreat_distance_m_;
   double retreat_start_max_deviation_m_;
+  double retreat_max_position_deviation_m_;
   double publish_rate_hz_;
   double input_timeout_sec_;
   bool approach_use_position_mode_;

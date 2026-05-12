@@ -123,3 +123,14 @@ def test_cpp_uses_reference_start_for_retreat_with_measured_pose_guard():
     assert "start = p_ref_;" in content
     assert "falling back to measured pose" in content
     assert "retreat_start_max_deviation_m: 0.3" in config
+
+
+def test_cpp_limits_position_setpoints_for_approach_and_retreat():
+    content = _controller_cpp_path().read_text(encoding="utf-8")
+    config = _motion_controller_config_path().read_text(encoding="utf-8")
+    assert "LimitPositionTarget(" in content
+    assert "LimitPositionTarget(p_ref_, approach_max_position_deviation_)" in content
+    assert "LimitPositionTarget(retreat_position_target_" in content
+    assert "retreat_max_position_deviation_m_(0.3)" in content
+    assert '"retreat_max_position_deviation_m"' in content
+    assert "retreat_max_position_deviation_m: 0.3" in config
