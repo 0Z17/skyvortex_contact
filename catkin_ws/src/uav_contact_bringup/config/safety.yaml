@@ -17,7 +17,7 @@ safety_monitor:
   motor_output_indices: []  # Empty means check every normalized output in the message.
   enable_rc_out_normal_velocity_inhibit: true
   rc_out_topic: "/mavros/rc/out"
-  rc_out_threshold: 1800
-  rc_out_clear_threshold: 1760
+  rc_out_threshold: 1820
+  rc_out_clear_threshold: 1800
   rc_out_release_hold_sec: 0.2
   rc_out_channels: []  # Empty means check every RC output channel. Channel indices are 0-based.

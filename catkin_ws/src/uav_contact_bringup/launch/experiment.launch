@@ -25,7 +25,7 @@
   <group ns="$(arg namespace)">
     <node pkg="uav_contact_core" type="laser_distance_relay.py" name="laser_distance_relay" output="screen"/>
     <node pkg="uav_contact_core" type="task_manager_node.py" name="task_manager" output="screen"/>
-    <node pkg="uav_contact_core" type="trajectory_server_node.py" name="trajectory_server" output="screen"/>
+    <!-- <node pkg="uav_contact_core" type="trajectory_server_node.py" name="trajectory_server" output="screen"/> -->
     <node pkg="uav_contact_core" type="dist_pid_controller.py" name="contact_controller" output="screen"/>
     <node pkg="uav_contact_core" type="uav_motion_controller_node" name="uav_motion_controller" output="screen">
       <rosparam file="$(find uav_contact_bringup)/config/uav_motion_controller.yaml" command="load"/>
