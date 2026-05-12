@@ -52,6 +52,7 @@ UavMotionControllerNode::UavMotionControllerNode()
       max_tangent_velocity_(kDefaultMaxTangentVelocity),
       tangent_position_kp_(1.0),
       retreat_distance_m_(0.3),
+      retreat_start_max_deviation_m_(0.3),
       publish_rate_hz_(kDefaultPublishRateHz),
       input_timeout_sec_(0.5),
       approach_use_position_mode_(true),
@@ -73,6 +74,9 @@ UavMotionControllerNode::UavMotionControllerNode()
   pnh_.param("tangent_position_kp", tangent_position_kp_, tangent_position_kp_);
   nh_.param("/trajectory_server/retreat_distance_m", retreat_distance_m_,
             retreat_distance_m_);
+  pnh_.param("retreat_start_max_deviation_m",
+             retreat_start_max_deviation_m_,
+             retreat_start_max_deviation_m_);
   pnh_.param("publish_rate_hz", publish_rate_hz_, publish_rate_hz_);
   pnh_.param("input_timeout_sec", input_timeout_sec_, input_timeout_sec_);
   pnh_.param("zero_when_not_offboard_ready", zero_when_not_offboard_ready_,
@@ -272,13 +276,35 @@ void UavMotionControllerNode::PublishApproachPositionSetpoint(
 }
 
 void UavMotionControllerNode::CaptureRetreatPositionTarget() {
-  if (!has_pose_meas_ && !has_pose_ref_) {
+  if (!has_pose_meas_) {
     has_retreat_position_target_ = false;
-    ROS_WARN_THROTTLE(1.0, "RETREAT requested before any pose is available");
+    ROS_WARN_THROTTLE(1.0, "RETREAT requested before measured pose is available");
     return;
   }
 
-  const std::array<double, 3> start = has_pose_meas_ ? p_meas_ : p_ref_;
+  std::array<double, 3> start = p_meas_;
+  if (has_pose_ref_) {
+    const std::array<double, 3> delta = {
+        p_ref_[0] - p_meas_[0],
+        p_ref_[1] - p_meas_[1],
+        p_ref_[2] - p_meas_[2],
+    };
+    const double deviation =
+        std::sqrt(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]);
+    const double max_deviation = std::max(0.0, retreat_start_max_deviation_m_);
+    if (deviation <= max_deviation) {
+      start = p_ref_;
+    } else {
+      ROS_WARN_STREAM(
+          "RETREAT reference start rejected: measured/reference deviation "
+          << deviation << " m exceeds " << max_deviation
+          << " m; falling back to measured pose");
+    }
+  } else {
+    ROS_WARN("RETREAT requested before trajectory reference is available; "
+             "falling back to measured pose");
+  }
+
   const std::array<double, 3> normal = NormalizedNormal();
   const double retreat_distance = std::max(0.0, retreat_distance_m_);
   retreat_position_target_ = {

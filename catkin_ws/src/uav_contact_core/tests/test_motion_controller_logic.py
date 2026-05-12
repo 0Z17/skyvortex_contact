@@ -31,6 +31,15 @@ def _controller_cpp_path() -> Path:
     )
 
 
+def _motion_controller_config_path() -> Path:
+    return (
+        Path(__file__).resolve().parents[2]
+        / "uav_contact_bringup"
+        / "config"
+        / "uav_motion_controller.yaml"
+    )
+
+
 def test_uav_motion_controller_cpp_exists():
     assert _controller_cpp_path().exists()
 
@@ -102,3 +111,15 @@ def test_cpp_uses_position_setpoint_for_retreat():
     assert "PublishRetreatPositionSetpoint(now)" in content
     assert "start[0] - retreat_distance * normal[0]" in content
     assert "msg.type_mask = kPositionOnlyTypeMask;" in content
+
+
+def test_cpp_uses_reference_start_for_retreat_with_measured_pose_guard():
+    content = _controller_cpp_path().read_text(encoding="utf-8")
+    config = _motion_controller_config_path().read_text(encoding="utf-8")
+    assert "retreat_start_max_deviation_m_(0.3)" in content
+    assert '"retreat_start_max_deviation_m"' in content
+    assert "if (!has_pose_meas_)" in content
+    assert "deviation <= max_deviation" in content
+    assert "start = p_ref_;" in content
+    assert "falling back to measured pose" in content
+    assert "retreat_start_max_deviation_m: 0.3" in config

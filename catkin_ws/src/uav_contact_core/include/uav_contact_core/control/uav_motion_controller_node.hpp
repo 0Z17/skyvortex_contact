@@ -70,6 +70,7 @@ class UavMotionControllerNode {
   double max_tangent_velocity_;
   double tangent_position_kp_;
   double retreat_distance_m_;
+  double retreat_start_max_deviation_m_;
   double publish_rate_hz_;
   double input_timeout_sec_;
   bool approach_use_position_mode_;
